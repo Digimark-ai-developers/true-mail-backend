@@ -1,3 +1,5 @@
+# app/main.py
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,11 +33,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(user.router)
 
-
-
-
 # Health Check Route
 @app.get("/", tags=["Health Check"])
 def health_check():
     return {"status": "ok", "message": "API is running successfully"}
-
