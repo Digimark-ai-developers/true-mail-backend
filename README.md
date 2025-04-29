@@ -36,7 +36,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 Folder Structures 
-
+```
 true-mail-backend/
 ├── alembic/                          # Alembic migrations folder
 │   └── (versions, env.py, etc.)
@@ -65,3 +65,5 @@ true-mail-backend/
 ├── requirements.txt                  # Project dependencies
 ├── .env                               # Environment variables
 └── README.md                          # Project overview
+
+```
