@@ -2,6 +2,7 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 from datetime import datetime
 
+
 class UserRegisterRequest(BaseModel):
     email: EmailStr
     password: str
@@ -11,20 +12,20 @@ class UserRegisterRequest(BaseModel):
     city: str
     gender: str
     photoURL: str
+    creditBalance: int
     stripeCustomerId: str
     emailsTest: str
     country: str
     state: str
     zip_code: int
 
-class UserLoginRequest(BaseModel):
-    email: EmailStr
-    password: str
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str
-    
+class UserInfo(BaseModel):
+    user_Id: str
+    email: EmailStr
+    first_name: str
+    last_name: str
+    photoURL: Optional[str]
 
     class Config:
         from_attributes = True

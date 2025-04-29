@@ -1,14 +1,14 @@
-from datetime import datetime, timedelta
-from jose import jwt
-import os
-SECRET_KEY = os.getenv("JWT_SECRET", "your-secret-key")
-ALGORITHM  = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+from fastapi import Depends, HTTPException, Request, status
+from app.utils.firebase import verify_firebase_token
 
-
-def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+def get_current_user(request: Request):
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing or invalid token")
+    
+    token = auth_header.split(" ")[1]
+    try:
+        decoded_user = verify_firebase_token(token)
+        return decoded_user  # you can use uid/email/etc. from this
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
