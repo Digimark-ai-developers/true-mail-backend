@@ -7,6 +7,7 @@ from app.routes import auth, user
 # from app.middlewares.auth_middleware import AuthMiddleware
 from app.database.db_config import create_database  # Import create_database function
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Code to execute during application startup
