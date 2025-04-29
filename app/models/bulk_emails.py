@@ -5,7 +5,7 @@ class BulkEmails(Base):
     __tablename__ = 'bulk_emails'
     
     email_id = Column(BigInteger, primary_key=True)
-    user_id = Column(BigInteger, ForeignKey('User.user_Id'), nullable=False)  # Proper foreign key
+    user_id = Column(String, ForeignKey('User.user_Id'), nullable=False)  # Proper foreign key
     user_emails = Column(String, nullable=False)  # Stores actual email content (e.g., "test@example.com")
     created_at = Column(DateTime(timezone=False), nullable=False)
     valid_email = Column(Integer, nullable=False)

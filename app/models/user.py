@@ -4,7 +4,7 @@ from app.database.db_config import Base
 class User(Base):
     __tablename__ = 'User'
     
-    user_Id = Column(BigInteger, primary_key=True)
+    user_Id = Column(String, primary_key=True, index=True, autoincrement=True)
     email = Column(String(255), nullable=False)
     first_name = Column(String(255), nullable=False)
     last_name = Column(String(255), nullable=False)

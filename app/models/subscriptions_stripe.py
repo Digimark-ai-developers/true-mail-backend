@@ -1,11 +1,11 @@
-from sqlalchemy import Column, BigInteger, Integer, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, BigInteger, Integer, Boolean, DateTime, ForeignKey,String
 from app.database.db_config import Base
 
 class SubscriptionsStripe(Base):
     __tablename__ = 'Subscriptions Stripe'
     
     subscription_Id = Column(BigInteger, primary_key=True)
-    userId = Column(Integer, ForeignKey('User.user_Id'), nullable=False)
+    userId = Column(String, ForeignKey('User.user_Id'), nullable=False)
     stripeSubscriptionId = Column(Integer, nullable=False)
     stripeCustomerId = Column(Integer, nullable=False)
     status = Column(Boolean, nullable=False)
