@@ -2,14 +2,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/9.0.0/firebase-auth.js";
 
-import { getAuth, signInWithEmailAndPassword } from "firebase/auth";
-
-const auth = getAuth();
-
-const userCredential = await signInWithEmailAndPassword(auth, email, password);
-const idToken = await userCredential.user.getIdToken();  
-
-
 const firebaseConfig = {
   apiKey: "AIzaSyAQV5MnRUHc27kzldAOVHgdipxz20FulqE",
   authDomain: "true-mail.firebaseapp.com",
@@ -17,6 +9,7 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 
 document.getElementById("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -34,22 +27,11 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
         "Content-Type": "application/json"
       }
     });
-    
 
     const result = await response.json();
     alert("Login success: " + JSON.stringify(result));
   } catch (error) {
     alert("Login failed: " + error.message);
   }
-
-  await fetch("http://localhost:8000/protected-route", {
-    method: "GET",  // or POST
-    headers: {
-      "Authorization": `Bearer ${idToken}`,  // <-- ✅ Send token here
-      "Content-Type": "application/json"
-    }
-  });
-  
-
 });
 

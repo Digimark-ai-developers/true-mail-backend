@@ -5,7 +5,7 @@ import firebase_admin
 
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.url.path.startswith("/auth"):  # Skip auth routes
+        if request.url.path.startswith("/auth"): 
             return await call_next(request)
 
         auth_header = request.headers.get("Authorization")
@@ -18,6 +18,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             request.state.user = decoded_token
         except Exception as e:
             raise HTTPException(status_code=401, detail="Invalid Firebase token")
-
+        
+ 
         return await call_next(request)
     
