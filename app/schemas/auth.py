@@ -3,8 +3,8 @@ from pydantic import BaseModel, EmailStr, field_validator, model_validator, root
 from app.utils.crypto_util import encrypt_data
 from app.utils.email_validator import validate_email_format, validate_email_domain, validate_email_mx_records
 
-class SignUpRequest(BaseModel):
-    username: str
+class UserSignup(BaseModel):
+    name: str
     email: str
     phone_number: str
     password: str
@@ -43,6 +43,9 @@ class SignUpRequest(BaseModel):
 class LoginRequest(BaseModel):
     username_or_email_or_phone: str
     password: str
+    
+class UserLogin(BaseModel):
+    id_token: str
 
 class GoogleAuthCallback(BaseModel):
     code: str
@@ -63,3 +66,6 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
     confirm_password: str
+
+
+

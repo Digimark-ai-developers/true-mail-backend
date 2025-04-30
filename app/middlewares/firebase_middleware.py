@@ -9,7 +9,8 @@ if not firebase_admin._apps:
 
 async def verify_firebase_token(request: Request):
     token = request.headers.get("Authorization")
-    
+    print("Authorization Header:", request.headers.get("authorization"))
+
     if not token or not token.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
 

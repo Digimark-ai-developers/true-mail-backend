@@ -65,5 +65,3 @@ true-mail-backend/
 ├── requirements.txt                  # Project dependencies
 ├── .env                               # Environment variables
 └── README.md                          # Project overview
-
-```

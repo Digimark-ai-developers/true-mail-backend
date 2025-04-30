@@ -15,7 +15,11 @@ def get_user_info( ):
     return 
 
 #route for user update
-@router.put("/{user_Id}", response_model=UserResponse)
+@router.put("/user{user_Id}", response_model=UserResponse)
 def update_user():
-    return
+    return 
 
+
+@router.delete("/user{uesr_id}", response_model=UserResponse)
+def user_delete():
+    return 
