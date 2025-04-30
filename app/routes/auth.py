@@ -1,31 +1,53 @@
-from fastapi import APIRouter, Depends, HTTPException
-from firebase_admin import auth
-from app.utils.firebase_utils import verify_id_token
-from app.schemas.auth import UserLogin, UserSignup
-from app.services.auth_services import create_user_in_db
+from fastapi import APIRouter, Depends, HTTPException, Request
+from firebase_admin import auth as firebase_auth
+from sqlalchemy.orm import Session
+from datetime import datetime
+from app.schemas.user import UserResponse
+from app.models.user import User
+from app.database.db_config import SessionLocal
 
-router = APIRouter()
+router = APIRouter(prefix="/auth", tags=["Auth"])
 
-@router.post("/signup", response_model=dict)
-async def signup(user: UserSignup):
+def get_db():
+    db = SessionLocal()
     try:
-        # Create user in Firebase Authentication
-        firebase_user = auth.create_user(
-            email=user.email,
-            password=user.password,
-            display_name=user.name
+        yield db
+    finally:
+        db.close()
+
+@router.post("/firebase-login", response_model=UserResponse)
+def firebase_login(request: Request, db: Session = Depends(get_db)):
+    firebase_user = request.state.user  # Comes from Firebase middleware
+    email = firebase_user["email"]
+    uid = firebase_user["uid"]
+
+    user = db.query(User).filter_by(email=email).first()
+    if not user:
+        # Create new user if not found
+        user = User(
+            user_role="user",  # default role
+            email=email,
+            first_name="",
+            last_name="",
+            address="",
+            city="",
+            is_Email_Verified=firebase_user.get("email_verified", False),
+            gender="",
+            photo_url=firebase_user.get("picture", ""),
+            emails_test="",
+            cuntry="",
+            state="",
+            zip_code=0,
+            credits=0.00,
+            is_paid=False,
+            status=True,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+            deleted_at=datetime.now(),
+            deleted_by=datetime.now()
         )
-        # Save user details in your database
-        create_user_in_db(firebase_user.uid, user.email, user.name)
-        return {"message": "User created successfully", "uid": firebase_user.uid}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        db.add(user)
+        db.commit()
+        db.refresh(user)
 
-@router.post("/login", response_model=dict)
-async def login(user: UserLogin):
-    try:
-        # Verify Firebase ID token (assuming client sends it)
-        decoded_token = verify_id_token(user.id_token)
-        return {"message": "Login successful", "user": decoded_token}
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+    return UserResponse(**user.__dict__)

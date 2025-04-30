@@ -1,19 +1,23 @@
+from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi import Request, HTTPException
-from app.utils.firebase_utils import verify_id_token
+from firebase_admin import auth
+import firebase_admin
 
-async def firebase_auth_middleware(request: Request, call_next):
-    if request.url.path.startswith("/auth"):
+class AuthMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.url.path.startswith("/auth"):  # Skip auth routes
+            return await call_next(request)
+
+        auth_header = request.headers.get("Authorization")
+        if not auth_header or not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization token")
+        id_token = auth_header.split(" ")[1]
+
+        try:
+            decoded_token = auth.verify_id_token(id_token)
+            request.state.user = decoded_token
+        except Exception as e:
+            raise HTTPException(status_code=401, detail="Invalid Firebase token")
+
         return await call_next(request)
-
-    authorization = request.headers.get("Authorization")
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing Authorization Header")
-
-    try:
-        id_token = authorization.split("Bearer ")[1]
-        decoded_token = verify_id_token(id_token)
-        request.state.user = decoded_token
-    except Exception as e:
-        raise HTTPException(status_code=401, detail="Invalid Token")
-
-    return await call_next(request)
+    
