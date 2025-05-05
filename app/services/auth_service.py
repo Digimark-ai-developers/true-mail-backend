@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
 from app.models.user import User
 from app.schemas.auth import UserRegisterRequest
+from app.utils.email_service import send_email_with_link
 from app.utils.firebase import verify_firebase_token
 from datetime import datetime
 from firebase_admin import auth as firebase_auth
@@ -19,6 +20,9 @@ class AuthService:
                 display_name=f"{user_data.first_name} {user_data.last_name}",
                 photo_url=user_data.photoURL
             )
+        # ✅ Generate email verification link from Firebase
+            link = firebase_auth.generate_email_verification_link(user_data.email)
+            send_email_with_link(user_data.email, link)
 
             # Step 2: Save user to local DB
             new_user = User(
@@ -59,10 +63,30 @@ class AuthService:
             user_info = verify_firebase_token(id_token)
             uid = user_info["uid"]
 
+            # Fetch Firebase user details
+            firebase_user = firebase_auth.get_user(uid)
+            if not firebase_user.email_verified:
+                raise HTTPException(status_code=403, detail="Email not verified. Please verify your email first.")
+
+            # Fetch user from local DB
             user = self.db.query(User).filter(User.user_Id == uid).first()
             if not user:
                 raise HTTPException(status_code=404, detail="User not found. Please register first.")
 
+            # Optional: sync verification status with your DB
+            if not user.isEmailVerified:
+                user.isEmailVerified = True
+                self.db.commit()
+
             return user
+
         except Exception as e:
             raise HTTPException(status_code=401, detail=f"Login failed: {str(e)}")
+        
+    def send_password_reset_email(self, email: str):
+        try:
+            reset_link = firebase_auth.generate_password_reset_link(email)
+            send_email_with_link(email, reset_link)
+            return {"message": "Password reset email sent successfully."}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to send password reset email: {str(e)}")
