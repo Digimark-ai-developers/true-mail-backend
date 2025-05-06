@@ -1,6 +1,5 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
-from datetime import datetime
 
 
 class UserRegisterRequest(BaseModel):
@@ -18,6 +17,10 @@ class UserRegisterRequest(BaseModel):
     country: str
     state: str
     zip_code: int
+
+
+class UserID(BaseModel):
+    user_id: str
 
 
 class UserInfo(BaseModel):

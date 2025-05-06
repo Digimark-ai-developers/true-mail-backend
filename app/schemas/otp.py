@@ -20,7 +20,6 @@ class OTPVerify(BaseModel):
     user_id: str
 
 
-
 class OTPResponse(BaseModel):
     id: int
     otp_code: str

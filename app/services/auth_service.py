@@ -1,11 +1,12 @@
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
+from fastapi import HTTPException
 from app.models.user import User
 from app.schemas.auth import UserRegisterRequest
 from app.utils.email_service import send_email_with_link
 from app.utils.firebase import verify_firebase_token
 from datetime import datetime
 from firebase_admin import auth as firebase_auth
+
 
 class AuthService:
     def __init__(self, db: Session):
@@ -57,7 +58,6 @@ class AuthService:
             self.db.rollback()
             raise HTTPException(status_code=400, detail=str(e))
 
-
     def login_user(self, id_token: str) -> User:
         try:
             user_info = verify_firebase_token(id_token)
@@ -82,7 +82,7 @@ class AuthService:
 
         except Exception as e:
             raise HTTPException(status_code=401, detail=f"Login failed: {str(e)}")
-        
+
     def send_password_reset_email(self, email: str):
         try:
             reset_link = firebase_auth.generate_password_reset_link(email)

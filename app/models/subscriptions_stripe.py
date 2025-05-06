@@ -1,16 +1,42 @@
-from sqlalchemy import Column, BigInteger, Integer, Boolean, DateTime, ForeignKey,String
+from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, DECIMAL
 from app.database.db_config import Base
+from sqlalchemy.orm import relationship
+
 
 class SubscriptionsStripe(Base):
-    __tablename__ = 'Subscriptions Stripe'
-    
-    subscription_Id = Column(BigInteger, primary_key=True)
-    userId = Column(String, ForeignKey('User.user_Id'), nullable=False)
-    stripeSubscriptionId = Column(Integer, nullable=False)
-    stripeCustomerId = Column(Integer, nullable=False)
-    status = Column(Boolean, nullable=False)
-    current_period_start = Column(DateTime(timezone=False), nullable=False)
-    current_period_end = Column(DateTime(timezone=False), nullable=False)
-    cancel_at = Column(DateTime(timezone=False), nullable=False)
-    created_at = Column(DateTime(timezone=False), nullable=False)
-    ended_at = Column(DateTime(timezone=False), nullable=False)
+    __tablename__ = 'subscriptions_stripe'
+
+    subscription_id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, ForeignKey('user.user_id'))
+    stripe_subscription_id = Column(String)
+    stripe_customer_id = Column(String)
+    subscription_plan = Column(String)
+    status = Column(Boolean)
+    current_period_start = Column(DateTime)
+    current_period_end = Column(DateTime)
+    cancel_at = Column(DateTime)
+    created_at = Column(DateTime)
+    ended_at = Column(DateTime)
+
+    user = relationship('User', backref='subscriptions_stripe')
+
+
+class Invoices(Base):
+    __tablename__ = 'invoices'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String, ForeignKey('user.user_id'))
+    total = Column(DECIMAL(8, 2))
+    amount = Column(DECIMAL)
+    number = Column(String)
+    tax = Column(DECIMAL(8, 2))
+    card_country = Column(String(255))
+    billing_state = Column(String(255))
+    billing_zip = Column(String(255))
+    billing_country = Column(String(255))
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
+    deleted_at = Column(DateTime)
+    deleted_by = Column(DateTime)
+
+    user = relationship('User', backref='invoices')

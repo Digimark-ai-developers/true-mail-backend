@@ -5,6 +5,7 @@ from app.routes import auth, user
 # from app.middlewares.auth_middleware import AuthMiddleware
 from app.database.db_config import create_database  # Import create_database function
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Code to execute during application startup
@@ -32,10 +33,7 @@ app.include_router(auth.router)
 app.include_router(user.router)
 
 
-
-
 # Health Check Route
 @app.get("/", tags=["Health Check"])
 def health_check():
     return {"status": "ok", "message": "API is running successfully"}
-
