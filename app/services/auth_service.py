@@ -21,38 +21,37 @@ class AuthService:
                 display_name=f"{user_data.first_name} {user_data.last_name}",
                 photo_url=user_data.photoURL
             )
-        # ✅ Generate email verification link from Firebase
+
+            # ✅ Generate email verification link from Firebase
             link = firebase_auth.generate_email_verification_link(user_data.email)
             send_email_with_link(user_data.email, link)
 
             # Step 2: Save user to local DB
             new_user = User(
-                user_Id=firebase_user.uid,
+                user_id=firebase_user.uid,
                 email=user_data.email,
                 first_name=user_data.first_name,
                 last_name=user_data.last_name,
                 address=user_data.address,
                 city=user_data.city,
-                isEmailVerified=False,
                 gender=user_data.gender,
-                photoURL=user_data.photoURL,
-                creditBalance=user_data.creditBalance,
-                stripeCustomerId=user_data.stripeCustomerId,
-                emailsTest=user_data.emailsTest,
-                cuntry=user_data.country,
+                photo_url=user_data.photoURL,
+                country=user_data.country,
                 state=user_data.state,
-                zip_cod=user_data.zip_code,
-                createdAt=datetime.utcnow(),
+                zip_code=str(user_data.zip_code),
+                created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow(),
-                deleted_at=datetime.utcnow(),
-                deleted_by=datetime.utcnow()
+                deleted_at=None,
+                deleted_by=None
             )
 
             self.db.add(new_user)
             self.db.commit()
-            self.db.refresh(new_user)
 
-            return new_user
+            return {
+                "message": "User registered successfully. Please verify your email.",
+                "status_code": 201
+            }
 
         except Exception as e:
             self.db.rollback()
@@ -69,14 +68,9 @@ class AuthService:
                 raise HTTPException(status_code=403, detail="Email not verified. Please verify your email first.")
 
             # Fetch user from local DB
-            user = self.db.query(User).filter(User.user_Id == uid).first()
+            user = self.db.query(User).filter(User.user_id == uid).first()
             if not user:
                 raise HTTPException(status_code=404, detail="User not found. Please register first.")
-
-            # Optional: sync verification status with your DB
-            if not user.isEmailVerified:
-                user.isEmailVerified = True
-                self.db.commit()
 
             return user
 

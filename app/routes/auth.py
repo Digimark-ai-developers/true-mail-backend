@@ -15,8 +15,8 @@ async def get_logged_in_user(user: UserID = Depends(get_current_user)):
     return user
 
 
-@router.post("/register", response_model=UserRegisterRequest, status_code=status.HTTP_201_CREATED)
-def register_user(user_data: UserInfo, db: Session = Depends(get_db)):
+@router.post("/register", status_code=status.HTTP_201_CREATED)
+def register_user(user_data: UserRegisterRequest, db: Session = Depends(get_db)):
     service = AuthService(db)
     return service.register_user(user_data)
 
@@ -29,7 +29,7 @@ def login_user(
     auth_service = AuthService(db)
     user = auth_service.login_user(id_token)
 
-    token = create_jwt_token({"user_Id": user.user_Id})
+    token = create_jwt_token({"user_Id": user.user_id})
 
     return {
         "access_token": token,

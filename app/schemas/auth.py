@@ -11,12 +11,26 @@ class UserRegisterRequest(BaseModel):
     city: str
     gender: str
     photoURL: str
-    creditBalance: int
-    stripeCustomerId: str
-    emailsTest: str
     country: str
     state: str
     zip_code: int
+
+
+class UserRegisterResponse(BaseModel):
+    user_id: str
+    email: EmailStr
+    first_name: str
+    last_name: str
+    address: str
+    city: str
+    gender: str
+    photo_url: str
+    country: str
+    state: str
+    zip_code: str
+
+    class Config:
+        orm_mode = True
 
 
 class UserID(BaseModel):
