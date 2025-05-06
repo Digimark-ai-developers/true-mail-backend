@@ -1,70 +1,34 @@
-from fastapi import HTTPException
-from pydantic import BaseModel, EmailStr, field_validator, model_validator
-from app.utils.email_validator import validate_email_format, validate_email_domain, validate_email_mx_records
-
-class UserSignup(BaseModel):
-    name: str
-    email: str
-    phone_number: str
-    password: str
-    confirm_password: str
-    otp_type: str
+from pydantic import BaseModel, EmailStr
+from typing import Optional
 
 
-    # @model_validator(mode="before")
-    # def encrypt_user_id(cls, values):
-    #     if "id" in values:
-    #         print('VALUES',values)
-
-    #         # Encrypt the integer ID and convert to string
-    #         values["id"] = encrypt_data(values["id"])  # Assumed encryption returns a string
-    #         print('XXXXX',type(values["id"]))
-
-    #     return values
-
-    # @model_validator(mode="before")
-    # def validate_email(cls, values):
-    #     email = values.get('email')
-    #     if email:
-    #         # Validate the email format
-    #         if not validate_email_format(email):
-    #             raise HTTPException(status_code=400, detail="Invalid email format.")
-            
-    #         # Validate the email domain
-    #         validate_email_domain(email)
-
-    #         # Validate MX records for the domain
-    #         domain = email.split("@")[-1]
-    #         validate_email_mx_records(domain)
-        
-    #     return values
-
-class LoginRequest(BaseModel):
-    username_or_email_or_phone: str
-    password: str
-    
-class UserLogin(BaseModel):
-    id_token: str
-
-class GoogleAuthCallback(BaseModel):
-    code: str
-
-class ForgotPasswordRequest(BaseModel):
+class UserRegisterRequest(BaseModel):
     email: EmailStr
-
-    @field_validator('email')
-    def validate_email(cls, value: str):
-        if not validate_email_format(value):
-            raise HTTPException(status_code=400, detail="Invalid email format.")
-        validate_email_domain(value)
-        domain = value.split('@')[-1]
-        validate_email_mx_records(domain)
-        return value
-
-class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str
-    confirm_password: str
-
+    password: str
+    first_name: str
+    last_name: str
+    address: str
+    city: str
+    gender: str
+    photoURL: str
+    creditBalance: int
+    stripeCustomerId: str
+    emailsTest: str
+    country: str
+    state: str
+    zip_code: int
 
 
+class UserID(BaseModel):
+    user_id: str
+
+
+class UserInfo(BaseModel):
+    user_Id: str
+    email: EmailStr
+    first_name: str
+    last_name: str
+    photoURL: Optional[str]
+
+    class Config:
+        from_attributes = True

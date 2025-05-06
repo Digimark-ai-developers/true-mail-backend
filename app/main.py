@@ -1,15 +1,9 @@
-
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import auth, user
 # from app.middlewares.auth_middleware import AuthMiddleware
 from app.database.db_config import create_database  # Import create_database function
-from app.middlewares.auth_middleware import AuthMiddleware
-
-from fastapi.staticfiles import StaticFiles
-
-
 
 
 @asynccontextmanager
@@ -24,8 +18,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-
 # Add CORS middleware for cross-origin requests
 app.add_middleware(
     CORSMiddleware,
@@ -35,15 +27,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 # app.add_middleware(AuthMiddleware)
-app.add_middleware(AuthMiddleware)
+
 # Include route modules
 app.include_router(auth.router)
 app.include_router(user.router)
+
 
 # Health Check Route
 @app.get("/", tags=["Health Check"])
 def health_check():
     return {"status": "ok", "message": "API is running successfully"}
-        
-    
-

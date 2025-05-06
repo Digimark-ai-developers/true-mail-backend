@@ -1,25 +1,11 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from app.database.db_config import get_db
-from app.models.user import User
-from app.schemas.user import UserResponse
-from fastapi import status
+from fastapi import APIRouter, Depends
+# from app.services.user_service import UserService
+from app.schemas.auth import UserInfo
+from app.utils.jwt_handler import get_current_user
 
-router = APIRouter(prefix="/users", tags=['Users'])
-
-#route for get users 
-@router.get("/me", status_code=status.HTTP_200_OK)
-def get_user_info( ):
-    
-    return 
-
-#route for user update
-@router.put("/user{user_Id}", response_model=UserResponse)
-def update_user():
-    return 
+router = APIRouter()
 
 
-@router.delete("/user{uesr_id}", response_model=UserResponse)
-def user_delete():
-    return 
+@router.get("/current-user", response_model=UserInfo)
+async def read_current_user(current_user: UserInfo = Depends(get_current_user)):
+    return current_user

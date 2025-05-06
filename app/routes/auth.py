@@ -1,53 +1,43 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
-from firebase_admin import auth as firebase_auth
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
-from datetime import datetime
-from app.schemas.user import UserResponse
-from app.models.user import User
-from app.database.db_config import SessionLocal
+from app.database.db_config import get_db
+# from app.schemas.user import UserInfo
+from app.schemas.auth import UserRegisterRequest, UserID, UserInfo
+from app.services.auth_service import AuthService
+from app.utils.jwt_handler import create_jwt_token, get_current_user
+from fastapi import Body
 
-router = APIRouter(prefix="/auth", tags=["Auth"])
+router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
-@router.post("/firebase-login", response_model=UserResponse)
-def firebase_login(request: Request, db: Session = Depends(get_db)):
-    firebase_user = request.state.user  # Comes from Firebase middleware
-    email = firebase_user["email"]
-    uid = firebase_user["uid"]
+@router.get("/me", response_model=UserInfo)
+async def get_logged_in_user(user: UserID = Depends(get_current_user)):
+    return user
 
-    user = db.query(User).filter_by(email=email).first()
-    if not user:
-        # Create new user if not found
-        user = User(
-            user_role="user",  # default role
-            email=email,
-            first_name="",
-            last_name="",
-            address="",
-            city="",
-            is_Email_Verified=firebase_user.get("email_verified", False),
-            gender="",
-            photo_url=firebase_user.get("picture", ""),
-            emails_test="",
-            cuntry="",
-            state="",
-            zip_code=0,
-            credits=0.00,
-            is_paid=False,
-            status=True,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-            deleted_at=datetime.now(),
-            deleted_by=datetime.now()
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
 
-    return UserResponse(**user.__dict__)
+@router.post("/register", response_model=UserRegisterRequest, status_code=status.HTTP_201_CREATED)
+def register_user(user_data: UserInfo, db: Session = Depends(get_db)):
+    service = AuthService(db)
+    return service.register_user(user_data)
+
+
+@router.post("/login")
+def login_user(
+    id_token: str = Body(..., embed=True),  # expects {"id_token": "..."}
+    db=Depends(get_db)
+):
+    auth_service = AuthService(db)
+    user = auth_service.login_user(id_token)
+
+    token = create_jwt_token({"user_Id": user.user_Id})
+
+    return {
+        "access_token": token,
+        "token_type": "bearer"
+    }
+
+
+@router.post("/forgot-password")
+def forgot_password(email: str, db: Session = Depends(get_db)):
+    auth_service = AuthService(db)
+    return auth_service.send_password_reset_email(email)
