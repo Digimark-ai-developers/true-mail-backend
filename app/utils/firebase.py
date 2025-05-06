@@ -16,5 +16,3 @@ def verify_firebase_token(id_token: str):
         return decoded_token  # contains uid, email, etc.
     except Exception as e:
         raise ValueError(f"Invalid Firebase token: {str(e)}")
-
-
