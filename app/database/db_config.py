@@ -1,5 +1,3 @@
-
-
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -11,6 +9,7 @@ load_dotenv()
 
 # PostgreSQL database URI (example: "postgresql://username:password@localhost/db_name")
 DATABASE_URL = os.getenv('DATABASE_URL')
+
 
 # Create database engine
 engine = create_engine(DATABASE_URL)
