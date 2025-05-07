@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, Boolean, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, Boolean, Integer, DateTime, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from app.database.db_config import Base
 
@@ -10,10 +10,10 @@ class BulkEmailStats(Base):
     user_id = Column(String, ForeignKey('user.user_id'))
     file_name = Column(String(255))
     user_tested_email = Column(Text)
-    duplicate_email = Column(Boolean)
+    duplicate_email = Column(Integer)  # how much duplicates in a file i numbers
     total_valid_emails = Column(Integer)
     email_status = Column(Text)
-    is_deliverable = Column(Boolean)
+    deliverable = Column(Float)
     is_risky = Column(Boolean)
     total = Column(Integer)
     created_at = Column(DateTime)
@@ -36,6 +36,7 @@ class TestEmail(Base):
     is_free = Column(Boolean)
     is_valid = Column(Boolean)
     is_disposable = Column(Boolean)
+    is_deliverable = Column(Boolean)
     has_tag = Column(Boolean)
     alphabetical_characters = Column(Integer)
     is_mailbox_full = Column(Boolean)
