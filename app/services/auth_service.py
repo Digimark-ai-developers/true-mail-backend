@@ -6,6 +6,7 @@ from app.utils.email_service import send_email_with_link
 from app.utils.firebase import verify_firebase_token
 from datetime import datetime
 from firebase_admin import auth as firebase_auth
+from firebase_admin._auth_utils import UserNotFoundError  # Import this
 
 
 class AuthService:
@@ -79,8 +80,22 @@ class AuthService:
 
     def send_password_reset_email(self, email: str):
         try:
+            # Optional: verify if user exists first
+            firebase_auth.get_user_by_email(email)
+
             reset_link = firebase_auth.generate_password_reset_link(email)
             send_email_with_link(email, reset_link)
-            return {"message": "Password reset email sent successfully."}
+            return {"message": "Password reset email sent successfully.", "status_code": 200}
+
+        except UserNotFoundError:
+            raise HTTPException(status_code=404, detail="Email not found in Firebase Authentication.")
+
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to send password reset email: {str(e)}")
+
+    def change_password(self, uid: str, new_password: str):
+        try:
+            firebase_auth.update_user(uid, password=new_password)
+            return {"message": "Password updated successfully.", "status_code": 200}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to change password: {str(e)}")
