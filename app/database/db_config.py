@@ -1,8 +1,3 @@
-<<<<<<< HEAD
-
-
-=======
->>>>>>> f34dbfe51f6de61f6019d86d3a4f2ada59e648b2
 import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -15,10 +10,6 @@ load_dotenv()
 # PostgreSQL database URI (example: "postgresql://username:password@localhost/db_name")
 DATABASE_URL = os.getenv('DATABASE_URL')
 
-<<<<<<< HEAD
-=======
-
->>>>>>> f34dbfe51f6de61f6019d86d3a4f2ada59e648b2
 # Create database engine
 engine = create_engine(DATABASE_URL)
 
