@@ -16,7 +16,9 @@ class OTPCreate(BaseModel):
 
 
 class OTPVerify(BaseModel):
-    otp_code: str = Field(..., min_length=6, max_length=6, description="The OTP to verify")
+    otp_code: str = Field(
+        ..., min_length=6, max_length=6, description="The OTP to verify"
+    )
     user_id: str
 
 
@@ -29,14 +31,14 @@ class OTPResponse(BaseModel):
 
     @model_validator(mode="before")
     def encrypt_user_id(cls, values):
-        print('BEFORE VLAID')
+        print("BEFORE VLAID")
         if "user_id" in values:
             values["user_id"] = encrypt_data(values["user_id"])
         return values
 
     @model_validator(mode="after")
     def decrypt_user_id(cls, values):
-        print('AFTER VLAID')
+        print("AFTER VLAID")
 
         if "user_id" in values:
             values["user_id"] = decrypt_data(values["user_id"])

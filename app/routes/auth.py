@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from app.database.db_config import get_db
+
 # from app.schemas.user import UserInfo
 from app.schemas.auth import UserRegisterRequest, UserID, UserInfo
 from app.services.auth_service import AuthService
@@ -26,7 +27,7 @@ def register_user(user_data: UserRegisterRequest, db: Session = Depends(get_db))
 @router.post("/login")
 def login_user(
     id_token: str = Body(..., embed=True),  # expects {"id_token": "..."}
-    db=Depends(get_db)
+    db=Depends(get_db),
 ):
     auth_service = AuthService(db)
     user = auth_service.login_user(id_token)
@@ -37,7 +38,7 @@ def login_user(
         "message": "Login successful",
         "status_code": 200,
         "access_token": token,
-        "token_type": "bearer"
+        "token_type": "bearer",
     }
 
 
@@ -51,7 +52,7 @@ def forgot_password(email: str, db: Session = Depends(get_db)):
 async def change_password(
     db: Session = Depends(get_db),
     payload: ChangePasswordRequest = Body(...),
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
 ):
     auth_service = AuthService(db)
 

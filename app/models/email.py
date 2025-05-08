@@ -1,13 +1,22 @@
-from sqlalchemy import Column, String, Text, Boolean, Integer, DateTime, ForeignKey, Float
+from sqlalchemy import (
+    Column,
+    String,
+    Text,
+    Boolean,
+    Integer,
+    DateTime,
+    ForeignKey,
+    Float,
+)
 from sqlalchemy.orm import relationship
 from app.database.db_config import Base
 
 
 class BulkEmailStats(Base):
-    __tablename__ = 'bulk_emails_stats'
+    __tablename__ = "bulk_emails_stats"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, ForeignKey('user.user_id'))
+    user_id = Column(String, ForeignKey("user.user_id"))
     file_name = Column(String(255))
     user_tested_email = Column(Text)
     duplicate_email = Column(Integer)  # how much duplicates in a file i numbers
@@ -18,15 +27,15 @@ class BulkEmailStats(Base):
     total = Column(Integer)
     created_at = Column(DateTime)
 
-    user = relationship('User', backref='bulk_emails_stats')
+    user = relationship("User", backref="bulk_emails_stats")
 
 
 class TestEmail(Base):
-    __tablename__ = 'test_email'
+    __tablename__ = "test_email"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, ForeignKey('user.user_id'))
-    file_id = Column(Integer, ForeignKey('bulk_emails_stats.id'), nullable=True)
+    user_id = Column(String, ForeignKey("user.user_id"))
+    file_id = Column(Integer, ForeignKey("bulk_emails_stats.id"), nullable=True)
     user_tested_email = Column(Text)
     full_name = Column(String(255))
     gender = Column(String)
@@ -51,5 +60,5 @@ class TestEmail(Base):
     score = Column(Integer)
     created_at = Column(DateTime)
 
-    user = relationship('User', backref='test_emails')
-    bulk_email_stats = relationship('BulkEmailStats', backref='test_emails')
+    user = relationship("User", backref="test_emails")
+    bulk_email_stats = relationship("BulkEmailStats", backref="test_emails")
