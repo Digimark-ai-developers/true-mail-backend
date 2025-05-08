@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import auth, user
+from app.routes import auth, user, email
 # from app.middlewares.auth_middleware import AuthMiddleware
 from app.database.db_config import create_database  # Import create_database function
 
@@ -31,6 +31,7 @@ app.add_middleware(
 # Include route modules
 app.include_router(auth.router)
 app.include_router(user.router)
+app.include_router(email.router)
 
 
 # Health Check Route
