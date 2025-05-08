@@ -1,11 +1,13 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
+from app.models.credits import Credit
 from app.models.user import User
 from app.schemas.auth import UserRegisterRequest
 from app.utils.email_service import send_email_with_link
 from app.utils.firebase import verify_firebase_token
-from datetime import datetime
 from firebase_admin import auth as firebase_auth
+from firebase_admin._auth_utils import UserNotFoundError  # Import this
+from datetime import datetime, timedelta
 
 
 class AuthService:
@@ -44,6 +46,17 @@ class AuthService:
                 deleted_at=None,
                 deleted_by=None
             )
+            credit_entry = Credit(
+                user_id=firebase_user.uid,
+                is_paid=False,
+                total_credits=100,
+                remaining_credits=100,
+                created_at=datetime.utcnow(),
+                last_updated=datetime.utcnow(),
+                expires_at=datetime.utcnow() + timedelta(days=730)  # 2 years
+            )
+
+            self.db.add(credit_entry)
 
             self.db.add(new_user)
             self.db.commit()
@@ -55,6 +68,7 @@ class AuthService:
 
         except Exception as e:
             self.db.rollback()
+            print(e)
             raise HTTPException(status_code=400, detail=str(e))
 
     def login_user(self, id_token: str) -> User:
@@ -79,8 +93,22 @@ class AuthService:
 
     def send_password_reset_email(self, email: str):
         try:
+            # Optional: verify if user exists first
+            firebase_auth.get_user_by_email(email)
+
             reset_link = firebase_auth.generate_password_reset_link(email)
             send_email_with_link(email, reset_link)
-            return {"message": "Password reset email sent successfully."}
+            return {"message": "Password reset email sent successfully.", "status_code": 200}
+
+        except UserNotFoundError:
+            raise HTTPException(status_code=404, detail="Email not found in Firebase Authentication.")
+
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to send password reset email: {str(e)}")
+
+    def change_password(self, uid: str, new_password: str):
+        try:
+            firebase_auth.update_user(uid, password=new_password)
+            return {"message": "Password updated successfully.", "status_code": 200}
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to change password: {str(e)}")
