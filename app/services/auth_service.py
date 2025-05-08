@@ -1,12 +1,13 @@
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
+from app.models.credits import Credit
 from app.models.user import User
 from app.schemas.auth import UserRegisterRequest
 from app.utils.email_service import send_email_with_link
 from app.utils.firebase import verify_firebase_token
-from datetime import datetime
 from firebase_admin import auth as firebase_auth
 from firebase_admin._auth_utils import UserNotFoundError  # Import this
+from datetime import datetime, timedelta
 
 
 class AuthService:
@@ -45,6 +46,17 @@ class AuthService:
                 deleted_at=None,
                 deleted_by=None
             )
+            credit_entry = Credit(
+                user_id=firebase_user.uid,
+                is_paid=False,
+                total_credits=100,
+                remaining_credits=100,
+                created_at=datetime.utcnow(),
+                last_updated=datetime.utcnow(),
+                expires_at=datetime.utcnow() + timedelta(days=730)  # 2 years
+            )
+
+            self.db.add(credit_entry)
 
             self.db.add(new_user)
             self.db.commit()
@@ -56,6 +68,7 @@ class AuthService:
 
         except Exception as e:
             self.db.rollback()
+            print(e)
             raise HTTPException(status_code=400, detail=str(e))
 
     def login_user(self, id_token: str) -> User:
