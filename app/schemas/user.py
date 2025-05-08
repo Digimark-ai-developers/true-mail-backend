@@ -1,5 +1,7 @@
-from pydantic import BaseModel, EmailStr
+# app/schemas/user.py
 from typing import Optional
+
+from pydantic import BaseModel, EmailStr
 
 
 class UserBase(BaseModel):
@@ -19,4 +21,3 @@ class UserResponse(BaseModel):
 
 class UserInfo(BaseModel):
     user_id: str
-
