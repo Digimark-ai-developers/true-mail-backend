@@ -24,6 +24,9 @@ class User(Base):
     deleted_by = Column(DateTime)
 
     permissions = relationship('UserPermissionRoles', backref='user', lazy=True)
+    credit = relationship("Credit", back_populates="user", uselist=False)
+    credit_usage = relationship("CreditUsage", back_populates="user")
+    credit_history = relationship("CreditHistory", back_populates="user")
 
 
 class Role(Base):
