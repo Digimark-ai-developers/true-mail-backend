@@ -1,5 +1,5 @@
-from pydantic import BaseModel, EmailStr
 from typing import Optional
+from pydantic import BaseModel, EmailStr
 
 
 class UserBase(BaseModel):
@@ -19,7 +19,3 @@ class UserResponse(BaseModel):
 
 class UserInfo(BaseModel):
     user_id: str
-<<<<<<< HEAD
-=======
-
->>>>>>> f34dbfe51f6de61f6019d86d3a4f2ada59e648b2
