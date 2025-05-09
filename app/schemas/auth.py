@@ -1,5 +1,7 @@
-from pydantic import BaseModel, EmailStr
+# app/schemas/auth.py
 from typing import Optional
+
+from pydantic import BaseModel, EmailStr
 
 
 class UserRegisterRequest(BaseModel):

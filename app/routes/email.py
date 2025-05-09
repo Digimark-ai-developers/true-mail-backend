@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.database.db_config import get_db
+from app.models.credits import Credit
 from app.models.email import BulkEmailStats, TestEmail  # Import your SQLAlchemy models
 from app.models.user import User
 from app.schemas.email import (  # Import your Pydantic models
@@ -173,12 +174,55 @@ def get_all_bulk_email_stats(db: Session = Depends(get_db)):
     return bulk_email_stats
 
 
+# @router.post(
+#     "/test_email/", response_model=TestEmailRead, status_code=status.HTTP_201_CREATED
+# )
+# def create_test_email(test_email: TestEmailCreate, db: Session = Depends(get_db)):
+#     """
+#     Create a test email entry.
+#     """
+#     # Validate user_id
+#     user = db.query(User).filter(User.user_id == test_email.user_id).first()
+#     if not user:
+#         raise HTTPException(
+#             status_code=status.HTTP_400_BAD_REQUEST, detail="User ID not found"
+#         )
+
+#     # Validate file_id if provided
+
+#     if test_email.file_id is not None:
+#         bulk_email_stats = (
+#             db.query(BulkEmailStats)
+#             .filter(BulkEmailStats.id == test_email.file_id)
+#             .first()
+#         )
+#         if not bulk_email_stats:
+#             raise HTTPException(
+#                 status_code=status.HTTP_400_BAD_REQUEST, detail="File ID not found"
+#             )
+
+#     db_test_email = TestEmail(**test_email.dict())
+#     db_test_email.created_at = datetime.utcnow()
+#     db.add(db_test_email)
+#     try:
+#         db.commit()
+#         db.refresh(db_test_email)
+#         return db_test_email
+#     except IntegrityError:
+#         db.rollback()
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail="Database error occurred",
+#         )  # Should not occur, but helpful to have.
+
+
+# import your Credit model
 @router.post(
     "/test_email/", response_model=TestEmailRead, status_code=status.HTTP_201_CREATED
 )
 def create_test_email(test_email: TestEmailCreate, db: Session = Depends(get_db)):
     """
-    Create a test email entry.
+    Create a test email entry and deduct one credit.
     """
     # Validate user_id
     user = db.query(User).filter(User.user_id == test_email.user_id).first()
@@ -187,8 +231,7 @@ def create_test_email(test_email: TestEmailCreate, db: Session = Depends(get_db)
             status_code=status.HTTP_400_BAD_REQUEST, detail="User ID not found"
         )
 
-    # Validate file_id if provided
-
+    # Validate file_id
     if test_email.file_id is not None:
         bulk_email_stats = (
             db.query(BulkEmailStats)
@@ -200,9 +243,28 @@ def create_test_email(test_email: TestEmailCreate, db: Session = Depends(get_db)
                 status_code=status.HTTP_400_BAD_REQUEST, detail="File ID not found"
             )
 
+    # Fetch credit record
+    credit = db.query(Credit).filter(Credit.user_id == test_email.user_id).first()
+    if not credit or credit.remaining_credits < 1:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient credits to test email",
+        )
+
+    # Deduct 1 credit
+    credit.remaining_credits -= 1
+    credit.last_updated = datetime.utcnow()
+    credit.total_credits -= 1
+    credit.last_updated = datetime.utcnow()
+
+    # 🔥 Explicitly re-add credit so SQLAlchemy tracks it
+    db.add(credit)
+
+    # Create TestEmail entry
     db_test_email = TestEmail(**test_email.dict())
     db_test_email.created_at = datetime.utcnow()
     db.add(db_test_email)
+
     try:
         db.commit()
         db.refresh(db_test_email)
@@ -212,7 +274,7 @@ def create_test_email(test_email: TestEmailCreate, db: Session = Depends(get_db)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Database error occurred",
-        )  # Should not occur, but helpful to have.
+        )
 
 
 @router.get("/test_email/{test_email_id}", response_model=TestEmailRead)
