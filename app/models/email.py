@@ -19,7 +19,7 @@ class BulkEmailStats(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, ForeignKey("user.user_id"))
-    file_name = Column(String(255))  #
+    file_name = Column(String(255))  # name of given file for bulk e-mail scan
     user_tested_email = Column(Text)  # which e-mials are tested by user id
     duplicate_email = Column(Integer)  # how much duplicates in a file i numbers
     total_valid_emails = Column(Integer)  # how much total valid e-mail
