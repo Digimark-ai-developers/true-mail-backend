@@ -39,7 +39,11 @@ def get_user(user_id: str, db: Session = Depends(get_db)):
 
 
 # Bulk Email Endpoints
-@router.post("/bulk_email_stats_with_emails/upload", summary="Upload a file (.csv or .txt) to create bulk email stats")
+@router.post(
+    "/bulk_email_stats_with_emails/upload",
+    summary="Upload a file (.csv or .txt) to create bulk email stats",
+    tags=["BulkEmails"],
+)
 def upload_bulk_email_file(
     file: UploadFile = File(...), db: Session = Depends(get_db), current_user: UserInfo = Depends(get_current_user)
 ):
