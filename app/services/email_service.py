@@ -1,6 +1,9 @@
+import csv, os
+from io import StringIO
 from datetime import datetime
 
 from fastapi import HTTPException, status, Body
+from fastapi import UploadFile, File
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
@@ -20,6 +23,139 @@ from app.schemas.user import UserInfo
 
 
 # Bulk email serivces
+
+
+def create_bulk_email_stats_from_file(
+    db: Session,
+    current_user: UserInfo,
+    file: UploadFile = File(...)
+):
+    # ✅ Step 1: Read and extract emails from file
+    try:
+        contents = file.file.read().decode("utf-8")
+        extension = os.path.splitext(file.filename)[1].lower()
+
+        if extension == ".csv":
+            reader = csv.reader(StringIO(contents))
+            emails = [row[0].strip().lower() for row in reader if row and row[0].strip()]
+        elif extension == ".txt":
+            emails = [line.strip().lower() for line in contents.splitlines() if line.strip()]
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unsupported file type. Only CSV and TXT are allowed."
+            )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not read the uploaded file. Make sure it's properly formatted."
+        )
+    finally:
+        file.file.close()
+
+    if not emails:
+        raise HTTPException(status_code=400, detail="No valid emails found in the uploaded file.")
+
+    # ✅ Step 2: Check credit
+    email_count = len(emails)
+    credit = db.query(Credit).filter(Credit.user_id == current_user.user_Id).first()
+    if not credit or credit.remaining_credits < email_count:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient credits to test all emails"
+        )
+
+    total_emails = len(emails)
+    unique_emails = set(emails)
+    duplicate_count = total_emails - len(unique_emails)
+
+    total_valid = 0
+    risky_count = 0
+    deliverable_count = 0
+
+    for email in emails:
+        if email.endswith("@gmail.com"):
+            total_valid += 1
+            deliverable_count += 1
+        elif "test" in email:
+            risky_count += 1
+
+    deliverable_percent = (deliverable_count / total_emails) * 100 if total_emails > 0 else 0
+
+    # ✅ Step 3: Create BulkEmailStats record
+    bulk_stat = BulkEmailStats(
+        user_id=current_user.user_Id,
+        file_name=file.filename,
+        duplicate_email=duplicate_count,
+        total_valid_emails=total_valid,
+        is_risky=risky_count > 0,
+        deliverable=deliverable_percent,
+        total=total_emails,
+        created_at=datetime.utcnow()
+    )
+    db.add(bulk_stat)
+    db.commit()
+    db.refresh(bulk_stat)
+
+    # ✅ Step 4: Create TestEmail entries
+    test_email_objs = []
+    for email in emails:
+        test_email_obj = TestEmail(
+            user_id=bulk_stat.user_id,
+            file_id=bulk_stat.id,
+            user_tested_email=email,
+            full_name="Unknown",
+            gender="Unknown",
+            status="Pending",
+            reason="N/A",
+            domain="unknown.com",
+            is_free=False,
+            is_valid=False,
+            is_disposable=False,
+            is_deliverable=False,
+            has_tag=False,
+            alphabetical_characters=0,
+            is_mailbox_full=False,
+            has_role=False,
+            is_accept_all=False,
+            has_numerical_characters=0,
+            has_unicode_symbols=0,
+            has_no_reply=False,
+            smtp_provider="Unknown",
+            mx_record="N/A",
+            implicit_mx_record="N/A",
+            score=0,
+            created_at=datetime.utcnow(),
+        )
+        db.add(test_email_obj)
+        test_email_objs.append(test_email_obj)
+
+    # ✅ Step 5: Deduct credits
+    credit.remaining_credits -= email_count
+    credit.total_credits -= email_count
+    credit.last_updated = datetime.utcnow()
+    db.add(credit)
+
+    try:
+        db.commit()
+        return JSONResponse(
+            status_code=status.HTTP_201_CREATED,
+            content={
+                "message": "Bulk email stats created successfully from file",
+                "data": BulkEmailStatsResponseWithEmails(
+                    user_id=current_user.user_Id,
+                    file_id=bulk_stat.id,
+                    file_name=bulk_stat.file_name,
+                    test_emails=[e.user_tested_email for e in test_email_objs],
+                ).dict()
+            }
+        )
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Could not save email records"
+        )
 
 
 def create_bulk_email_stats(

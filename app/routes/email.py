@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Body, UploadFile, File
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
@@ -16,7 +16,12 @@ from app.schemas.email import (  # Import your Pydantic models
 )
 from app.schemas.user import UserResponse, UserInfo
 from app.utils.jwt_handler import get_current_user
-from app.services.email_service import create_bulk_email_stats, get_bulk_email_stats_by_id, create_single_email
+from app.services.email_service import (
+    create_bulk_email_stats,
+    get_bulk_email_stats_by_id,
+    create_single_email,
+    create_bulk_email_stats_from_file,
+)
 
 router = APIRouter()
 
@@ -34,8 +39,15 @@ def get_user(user_id: str, db: Session = Depends(get_db)):
 
 
 # Bulk Email Endpoints
+@router.post("/bulk_email_stats_with_emails/upload", summary="Upload a file (.csv or .txt) to create bulk email stats")
+def upload_bulk_email_file(
+    file: UploadFile = File(...), db: Session = Depends(get_db), current_user: UserInfo = Depends(get_current_user)
+):
+    return create_bulk_email_stats_from_file(db=db, current_user=current_user, file=file)
+
+
 @router.post(
-    "/bulk_email_stats_with_emails/",
+    "/bulk_email_stats_with_emails/(Copy/Paste)/",
     status_code=status.HTTP_201_CREATED,
     summary="Create Bulk Email Stats with Test Emails and Deduct Credits",
     description="Creates a bulk email stats record with associated test emails, while deducting user credits per email.",
