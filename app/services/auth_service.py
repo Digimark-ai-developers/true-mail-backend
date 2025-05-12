@@ -7,7 +7,7 @@ from app.utils.email_service import send_email_with_link
 from app.utils.firebase import verify_firebase_token
 from firebase_admin import auth as firebase_auth
 from firebase_admin._auth_utils import UserNotFoundError  # Import this
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 
 class AuthService:
@@ -51,9 +51,9 @@ class AuthService:
                 is_paid=False,
                 total_credits=100,
                 remaining_credits=100,
-                created_at=datetime.utcnow(),
-                last_updated=datetime.utcnow(),
-                expires_at=datetime.utcnow() + timedelta(days=730),  # 2 years
+                created_at=datetime.now(timezone.utc),
+                last_updated=datetime.now(timezone.utc),
+                expires_at=datetime.now(timezone.utc) + timedelta(days=730),  # 2 years
             )
 
             self.db.add(credit_entry)

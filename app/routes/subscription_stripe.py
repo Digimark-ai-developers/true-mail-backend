@@ -12,7 +12,7 @@ router = APIRouter(prefix="/stripe", tags=["Stripe"])
 async def create_session(
     data: CheckoutSessionRequest, user: UserInfo = Depends(get_current_user)
 ):
-    url = create_checkout_session(user.email, data.card_title, data.card_price)
+    url = create_checkout_session(user.email, data.card_title, data.card_price, data.user_id)
     return {"url": url}
 
 
