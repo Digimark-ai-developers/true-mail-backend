@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from fastapi import HTTPException, status, Body
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -148,7 +149,14 @@ def get_bulk_email_stats_by_id(bulk_email_id: int, db: Session):
     result.test_emails = [
         TestEmailRead.from_orm(email) for email in test_emails
     ]  # Convert each TestEmail to TestEmailRead
-    return result
+    result_dict = jsonable_encoder(result)
+    return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={
+                "message": "Bulk email stat found successfully",
+                "data": result_dict
+            },
+        )
 
 # Single Email Services
 
@@ -192,7 +200,14 @@ def create_single_email(test_email: TestEmailCreate, db: Session):
     try:
         db.commit()
         db.refresh(db_test_email)
-        return db_test_email
+        db_test_email_dict = jsonable_encoder(db_test_email)
+        return JSONResponse(
+            status_code=status.HTTP_201_CREATED,
+            content={
+                "message": "Test email created successfully",
+                "data": db_test_email_dict
+            },
+        )
     except IntegrityError:
         db.rollback()
         raise HTTPException(

@@ -1,6 +1,8 @@
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.database.db_config import get_db
@@ -72,7 +74,7 @@ def get_bulk_email_stats(
 
 @router.get(
     "/bulk_email_stats/",
-    response_model=List[BulkEmailStatsWithTestEmails],
+    # response_model=List[BulkEmailStatsWithTestEmails],
     summary="Get All Bulk Email Stats with Test Emails",
     description="Retrieve a list of all bulk email statistics including their associated test emails.",
     responses={
@@ -87,7 +89,11 @@ def get_all_bulk_email_stats(
 ):
     try:
         bulk_email_stats = db.query(BulkEmailStats).options(joinedload(BulkEmailStats.test_emails)).all()
-        return bulk_email_stats
+        bulk_emails_dict = jsonable_encoder(bulk_email_stats)
+        return JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content={"message": "Bulk email stats read successfully", "data": bulk_emails_dict},
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -95,7 +101,6 @@ def get_all_bulk_email_stats(
 # import your Credit model
 @router.post(
     "/test_email/",
-    response_model=TestEmailRead,
     status_code=status.HTTP_201_CREATED,
     tags=["SingleEmails"],
 )
@@ -122,7 +127,11 @@ def get_test_email(
     test_email = db.query(TestEmail).filter(TestEmail.id == test_email_id).first()
     if not test_email:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test email not found")
-    return test_email
+    test_email_dict = jsonable_encoder(test_email)
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"message": "Test email found successfully", "data": test_email_dict},
+    )
 
 
 @router.get(
@@ -138,4 +147,8 @@ def get_all_test_emails(
     Get all test emails.
     """
     test_emails = db.query(TestEmail).all()
-    return test_emails
+    test_emails_dict = jsonable_encoder(test_emails)
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"message": "Test emails read successfully", "data": test_emails_dict},
+    )
