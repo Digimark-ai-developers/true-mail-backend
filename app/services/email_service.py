@@ -184,7 +184,7 @@ def create_bulk_email_stats(
     deliverable_count = 0
 
     for email in emails:
-        # Your own custom validation logic can go here
+        # Custom validation logic can go here
         if email.endswith("@gmail.com"):
             total_valid += 1
             deliverable_count += 1
