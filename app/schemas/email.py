@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # Base models (for shared fields)
@@ -12,10 +12,10 @@ class UserBase(BaseModel):
 
 class BulkEmailStatsBase(BaseModel):
     file_name: str
-    user_tested_email: str
+    user_tested_email: Optional[str] = None  # Added can be None for testing purposes
     duplicate_email: int
     total_valid_emails: int
-    email_status: str
+    email_status: Optional[str] = None  # Added can be None for testing purposes
     deliverable: float
     is_risky: bool
     total: int
@@ -23,7 +23,7 @@ class BulkEmailStatsBase(BaseModel):
 
 
 class TestEmailBase(BaseModel):
-    user_tested_email: str
+    user_tested_email: Optional[str] = None
     full_name: Optional[str] = None
     gender: Optional[str] = None
     status: Optional[str] = None
@@ -63,11 +63,15 @@ class BulkEmailStatsRead(BulkEmailStatsBase):
     id: int
     user_id: str
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class TestEmailRead(TestEmailBase):
     id: int
     user_id: str
     file_id: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # Model for User. Pydantic model representation
@@ -84,6 +88,8 @@ class TestEmailList(BaseModel):
 # Model to include TestEmailList and BulkEmailStatsRead
 class BulkEmailStatsWithTestEmails(BulkEmailStatsRead):
     test_emails: List[TestEmailRead]
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BulkEmailStatsCreateWithEmails(BaseModel):
@@ -104,7 +110,3 @@ class BulkEmailStatsResponseWithEmails(BaseModel):
     file_id: int
     file_name: str
     test_emails: list[str]
-
-
-# class BulkEmailStatsCreate(BulkEmailStatsBase):
-#     user_id: str  # Make user_id required for creation
