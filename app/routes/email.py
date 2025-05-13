@@ -22,10 +22,6 @@ from app.schemas.email import (  # Import your Pydantic models
     TestEmailRead,
 )
 from app.schemas.user import UserInfo, UserResponse
-from app.services.email_validation_service import (
-    validate_and_store_email,
-    validate_email_fields,
-)
 from app.utils.jwt_handler import get_current_user
 
 router = APIRouter()
@@ -258,48 +254,6 @@ def get_all_bulk_email_stats(db: Session = Depends(get_db)):
     """
     bulk_email_stats = db.query(BulkEmailStats).all()
     return bulk_email_stats
-
-
-# @router.post(
-#     "/test_email/", response_model=TestEmailRead, status_code=status.HTTP_201_CREATED
-# )
-# def create_test_email(test_email: TestEmailCreate, db: Session = Depends(get_db)):
-#     """
-#     Create a test email entry.
-#     """
-#     # Validate user_id
-#     user = db.query(User).filter(User.user_id == test_email.user_id).first()
-#     if not user:
-#         raise HTTPException(
-#             status_code=status.HTTP_400_BAD_REQUEST, detail="User ID not found"
-#         )
-
-#     # Validate file_id if provided
-
-#     if test_email.file_id is not None:
-#         bulk_email_stats = (
-#             db.query(BulkEmailStats)
-#             .filter(BulkEmailStats.id == test_email.file_id)
-#             .first()
-#         )
-#         if not bulk_email_stats:
-#             raise HTTPException(
-#                 status_code=status.HTTP_400_BAD_REQUEST, detail="File ID not found"
-#             )
-
-#     db_test_email = TestEmail(**test_email.dict())
-#     db_test_email.created_at = datetime.utcnow()
-#     db.add(db_test_email)
-#     try:
-#         db.commit()
-#         db.refresh(db_test_email)
-#         return db_test_email
-#     except IntegrityError:
-#         db.rollback()
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail="Database error occurred",
-#         )  # Should not occur, but helpful to have.
 
 
 # import your Credit model
