@@ -16,6 +16,7 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
+from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 
@@ -80,8 +81,9 @@ def create_test_email(test_email: TestEmailCreate, db: Session = Depends(get_db)
     db.add(credit)
 
     # Create TestEmail entry
-    db_test_email = TestEmail(**test_email.dict())
-    db_test_email.created_at = datetime.utcnow()
+    db_test_email = TestEmail(**test_email.model_dump())
+    db_test_email.created_at = datetime.now(timezone.utc)
+    db_test_email.soft_delete = False
     db.add(db_test_email)
     db.commit()
     db.refresh(db_test_email)
@@ -114,12 +116,12 @@ def create_test_email(test_email: TestEmailCreate, db: Session = Depends(get_db)
         )
 
 
-@router.get("/test_email/{test_email_id}", response_model=TestEmailRead)
+@router.get("/test_email/{test_email_id}")
 def get_test_email(test_email_id: int, db: Session = Depends(get_db)):
     """
     Get a test email by its ID.
     """
-    test_email = db.query(TestEmail).filter(TestEmail.id == test_email_id).first()
+    test_email = db.query(TestEmail).filter(TestEmail.id == test_email_id, TestEmail.soft_delete == False).first()
     if not test_email:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test email not found")
     test_email_dict = jsonable_encoder(**test_email.model_dump())
@@ -129,16 +131,19 @@ def get_test_email(test_email_id: int, db: Session = Depends(get_db)):
     )
 
 
-@router.get("/test_email/", response_model=List[TestEmailRead])
+@router.get("/test_email/")
 def get_all_test_emails(db: Session = Depends(get_db)):
     """
     Get all test emails.
     """
-    test_emails = db.query(TestEmail).all()
+    test_emails = (
+        db.query(TestEmail).filter(or_(TestEmail.soft_delete.is_(None), TestEmail.soft_delete.is_(False))).all()
+    )
+    print(test_emails)
     test_email_dict = jsonable_encoder(test_emails)
     return JSONResponse(
         status_code=status.HTTP_200_OK,
-        content={"message": "All test emails read successfully", "data": test_email_dict},
+        content=jsonable_encoder({"message": "All test emails read successfully", "data": test_email_dict}),
     )
 
 
@@ -214,7 +219,8 @@ def upload_bulk_email_file(
         is_risky=risky_count > 0,
         deliverable=deliverable_percent,
         total=total_emails,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        soft_delete=False,
     )
     db.add(bulk_stat)
     db.commit()
@@ -248,7 +254,8 @@ def upload_bulk_email_file(
             mx_record="N/A",
             implicit_mx_record="N/A",
             score=0,
-            created_at=datetime.utcnow(),
+            soft_delete=False,
+            created_at=datetime.now(timezone.utc),
         )
         db.add(test_email_obj)
         test_email_objs.append(test_email_obj)
@@ -340,7 +347,8 @@ def create_bulk_email_stats_with_emails(
         is_risky=False,
         deliverable=deliverable_percent,
         total=total_emails,
-        created_at=datetime.utcnow(),
+        soft_delete=False,
+        created_at=datetime.now(timezone.utc),
     )
     db.add(bulk_stat)
     db.commit()
@@ -374,7 +382,8 @@ def create_bulk_email_stats_with_emails(
             mx_record="N/A",  # Default value
             implicit_mx_record="N/A",  # Default value
             score=0,  # Default value
-            created_at=datetime.utcnow(),  # Current time as default value
+            soft_delete=False,
+            created_at=datetime.now(timezone.utc),  # Current time as default value
         )
         db.add(test_email_obj)
         test_email_objs.append(test_email_obj)
@@ -418,6 +427,31 @@ def create_bulk_email_stats_with_emails(
         )
 
 
+@router.get(
+    "/bulk_email_stats/",
+    summary="Get All Bulk Email Stats",
+    description="Retrieve a list of all bulk email statistics.",
+    responses={
+        200: {"description": "List of bulk email stats retrieved successfully."},
+        500: {"description": "Internal server error."},
+    },
+)
+def get_all_bulk_email_stats(db: Session = Depends(get_db)):
+    """
+    Get all bulk email statistics.
+    """
+    bulk_email_stats = (
+        db.query(BulkEmailStats)
+        .filter(or_(BulkEmailStats.soft_delete.is_(False), BulkEmailStats.soft_delete.is_(None)))
+        .all()
+    )
+    bulk_email_stats_dict = jsonable_encoder(bulk_email_stats)
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"message": "Read all bulk stats successfully.", "data": bulk_email_stats_dict},
+    )
+
+
 @router.get("/users/{user_id}")
 def get_user(user_id: str, db: Session = Depends(get_db)):
     """
@@ -449,6 +483,7 @@ async def update_filename(
         .filter(
             BulkEmailStats.file_name == old_filename,
             BulkEmailStats.user_id == current_user.user_Id,
+            or_(BulkEmailStats.soft_delete.is_(None), BulkEmailStats.soft_delete.is_(False)),
         )
         .first()
     )
@@ -465,4 +500,78 @@ async def update_filename(
             "Message": "File name changed succesfully.",
             "data": db_filename.file_name,
         },
+    )
+
+
+# Delete functionality
+@router.delete("/test_email/delete/")
+async def test_email_delete(
+    user_test_email: str,
+    session: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[UserInfo, Depends(get_current_user)],
+):
+    """Deletes test_email"""
+    db_test_email = (
+        session.query(TestEmail)
+        .filter(
+            TestEmail.user_tested_email == user_test_email,
+            TestEmail.user_id == current_user.user_Id,
+            or_(TestEmail.soft_delete.is_(False), TestEmail.soft_delete.is_(None)),
+        )
+        .first()
+    )
+    if not db_test_email:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found.")
+    db_test_email.soft_delete = True
+    session.commit()
+    session.refresh(db_test_email)
+    db_test_email_dict = jsonable_encoder(db_test_email)
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"message": "Test email deleted successfully.", "data": db_test_email_dict},
+    )
+
+
+@router.delete("/bulk_stats/delete/")
+async def delete_bulk_stats(
+    filename: str,
+    session: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[UserInfo, Depends(get_current_user)],
+):
+    """Delete bulk stats"""
+    db_bulk_stats = (
+        session.query(BulkEmailStats)
+        .filter(
+            BulkEmailStats.file_name == filename,
+            BulkEmailStats.user_id == current_user.user_Id,
+            or_(BulkEmailStats.soft_delete.is_(False), BulkEmailStats.soft_delete.is_(None)),
+        )
+        .first()
+    )
+    if not db_bulk_stats:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bulk stats not found.")
+    db_bulk_stats.soft_delete = True
+    db_test_emails = (
+        session.query(TestEmail)
+        .filter(
+            TestEmail.file_id == db_bulk_stats.id,
+            TestEmail.user_id == current_user.user_Id,
+            or_(TestEmail.soft_delete.is_(False), TestEmail.soft_delete.is_(None)),
+        )
+        .all()
+    )
+    for emails in db_test_emails:
+        emails.soft_delete = True
+
+    session.commit()
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=jsonable_encoder(
+            {
+                "message": "Bulk stats have been deleted successfully.",
+                "File_data": BulkEmailStatsRead.model_validate(db_bulk_stats).model_dump(),
+                "File_emails": [TestEmailRead.model_validate(email).model_dump() for email in db_test_emails],
+            }
+        ),
     )

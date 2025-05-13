@@ -28,6 +28,7 @@ class BulkEmailStats(Base):
     is_risky = Column(Boolean)  # is that e-mail is risky
     total = Column(Integer)  # total e-mail in files are check
     created_at = Column(DateTime)
+    soft_delete = Column(Boolean)
 
     user = relationship("User", backref="bulk_emails_stats")
 
@@ -49,9 +50,7 @@ class TestEmail(Base):
     is_disposable = Column(Boolean)  # is that e-mail DEA
     is_deliverable = Column(Boolean)  # is e-mail deliverable
     has_tag = Column(Boolean)  # e-mail has tag appended like username+tag.gmail.com
-    alphabetical_characters = Column(
-        Integer
-    )  # how much alphabatical characters in per email
+    alphabetical_characters = Column(Integer)  # how much alphabatical characters in per email
     is_mailbox_full = Column(Boolean)  #
     has_role = Column(Boolean)  #  an e-mail address has role like support@teammail.com
     is_accept_all = Column(Boolean)  # is that e-mail server accepetable
@@ -59,12 +58,11 @@ class TestEmail(Base):
     has_unicode_symbols = Column(Integer)  # is e-mail has unicode
     has_no_reply = Column(Boolean)  # an address has indicates in should no reply
     smtp_provider = Column(String(255))  # like Microsoft etc
-    mx_record = Column(
-        String(255)
-    )  # like digimarkdevelopers-com.mail.protection.mailtitan.com
+    mx_record = Column(String(255))  # like digimarkdevelopers-com.mail.protection.mailtitan.com
     implicit_mx_record = Column(String(255))  # implicit mx record
     score = Column(Integer)  # e-mail socre
     created_at = Column(DateTime)
+    soft_delete = Column(Boolean)
 
     user = relationship("User", backref="test_emails")
     bulk_email_stats = relationship("BulkEmailStats", backref="test_emails")

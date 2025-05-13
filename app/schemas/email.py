@@ -19,6 +19,7 @@ class BulkEmailStatsBase(BaseModel):
     deliverable: float
     is_risky: bool
     total: int
+    soft_delete: bool
     created_at: datetime
 
 
@@ -45,6 +46,7 @@ class TestEmailBase(BaseModel):
     mx_record: Optional[str] = None
     implicit_mx_record: Optional[str] = None
     score: int
+    soft_delete: bool
     created_at: datetime
 
 
@@ -91,18 +93,13 @@ class BulkEmailStatsWithTestEmails(BulkEmailStatsRead):
 
     model_config = ConfigDict(from_attributes=True)
 
-class BulkEmailStatsCreate(BulkEmailStatsBase):
-    user_id: str  # Make user_id required for creation
-
 
 class SimpleEmailCheckRequest(BaseModel):
     user_tested_email: str
 
 
 class BulkEmailStatsCreateWithEmails(BaseModel):
-    test_emails: List[str] = Field(
-        ..., description="List of email addresses to be tested"
-    )
+    test_emails: List[str] = Field(..., description="List of email addresses to be tested")
 
     class Config:
         schema_extra = {
