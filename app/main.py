@@ -37,6 +37,7 @@ app.include_router(user.router)
 app.include_router(email.router)
 app.include_router(credit.router)
 
+
 # Health Check Route
 @app.get("/", tags=["Health Check"])
 def health_check():

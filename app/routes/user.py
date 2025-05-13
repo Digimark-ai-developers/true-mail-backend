@@ -1,19 +1,13 @@
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
-from pydantic import BaseModel, EmailStr
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.database.db_config import get_db
 from app.models.user import User
-
-# from app.services.user_service import UserService
-from app.schemas.auth import UserInfo
-from app.schemas.user import UserProfileRead, UserProfileUpdate
-from app.utils.jwt_handler import get_current_user
+from app.schemas.user import UserProfileUpdate
 
 router = APIRouter(prefix="/user", tags=["User "])
 
@@ -24,9 +18,7 @@ def get_user_profile(user_id: str, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     user_dict = jsonable_encoder(user)
-    return JSONResponse(
-        status_code=status.HTTP_302_FOUND, content={"message": "User found successfully.", "data": user_dict}
-    )
+    return JSONResponse(status_code=status.HTTP_302_FOUND, content={"message": "User found successfully.", "data": user_dict})
 
 
 @router.put("/{user_id}/update")
@@ -43,9 +35,7 @@ def update_user_profile(user_id: str, user_data: UserProfileUpdate, db: Session 
     db.commit()
     db.refresh(user)
     user_dict = jsonable_encoder(user)
-    return JSONResponse(
-        status_code=status.HTTP_302_FOUND, content={"message": "User updated successfully.", "data": user_dict}
-    )
+    return JSONResponse(status_code=status.HTTP_302_FOUND, content={"message": "User updated successfully.", "data": user_dict})
 
 
 # @router.delete("/{user_id}")
@@ -64,8 +54,6 @@ def update_user_profile(user_id: str, user_data: UserProfileUpdate, db: Session 
 
 @router.get("/")
 def list_users(db: Session = Depends(get_db)):
-    users = db.query(User).filter(User.status == True).all()
+    users = db.query(User).filter(User.status.is_(True)).all()
     user_dict = jsonable_encoder(users)
-    return JSONResponse(
-        status_code=status.HTTP_302_FOUND, content={"message": "User data read successfully.", "data": user_dict}
-    )
+    return JSONResponse(status_code=status.HTTP_302_FOUND, content={"message": "User data read successfully.", "data": user_dict})

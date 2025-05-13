@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import datetime
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.utils.crypto_util import decrypt_data, encrypt_data
 
@@ -29,14 +30,14 @@ class OTPResponse(BaseModel):
 
     @model_validator(mode="before")
     def encrypt_user_id(cls, values):
-        print('BEFORE VLAID')
+        print("BEFORE VLAID")
         if "user_id" in values:
             values["user_id"] = encrypt_data(values["user_id"])
         return values
 
     @model_validator(mode="after")
     def decrypt_user_id(cls, values):
-        print('AFTER VLAID')
+        print("AFTER VLAID")
 
         if "user_id" in values:
             values["user_id"] = decrypt_data(values["user_id"])

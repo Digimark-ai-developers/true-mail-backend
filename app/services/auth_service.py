@@ -90,9 +90,7 @@ class AuthService:
             # Fetch user from local DB
             user = self.db.query(User).filter(User.user_id == uid).first()
             if not user:
-                raise HTTPException(
-                    status_code=404, detail="User not found. Please register first."
-                )
+                raise HTTPException(status_code=404, detail="User not found. Please register first.")
 
             return user
 
@@ -112,20 +110,14 @@ class AuthService:
             }
 
         except UserNotFoundError:
-            raise HTTPException(
-                status_code=404, detail="Email not found in Firebase Authentication."
-            )
+            raise HTTPException(status_code=404, detail="Email not found in Firebase Authentication.")
 
         except Exception as e:
-            raise HTTPException(
-                status_code=400, detail=f"Failed to send password reset email: {str(e)}"
-            )
+            raise HTTPException(status_code=400, detail=f"Failed to send password reset email: {str(e)}")
 
     def change_password(self, uid: str, new_password: str):
         try:
             firebase_auth.update_user(uid, password=new_password)
             return {"message": "Password updated successfully.", "status_code": 200}
         except Exception as e:
-            raise HTTPException(
-                status_code=400, detail=f"Failed to change password: {str(e)}"
-            )
+            raise HTTPException(status_code=400, detail=f"Failed to change password: {str(e)}")

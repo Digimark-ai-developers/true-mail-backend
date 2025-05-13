@@ -1,19 +1,24 @@
 import os
+
 <<<<<<< HEAD
 from logging.config import fileConfig
+
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
+
 from alembic import context
 from app.database.db_config import Base  # this includes declarative_base()
-
-from app.models import email, user, subscriptions_stripe  # noqa: F401
+from app.models import email, subscriptions_stripe, user  # noqa: F401
 
 target_metadata = Base.metadata
 =======
+from logging.config import fileConfig
+
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
-from logging.config import fileConfig
+
 from alembic import context
+
 >>>>>>> f34dbfe51f6de61f6019d86d3a4f2ada59e648b2
 
 # Load env vars from .env
@@ -34,7 +39,7 @@ fileConfig(config.config_file_name)
 from app.database.db_config import Base  # this includes declarative_base()
 
 # Import all models so Alembic can detect them
-from app.models import user,subscriptions_stripe, email
+from app.models import email, subscriptions_stripe, user
 
 target_metadata = Base.metadata
 >>>>>>> f34dbfe51f6de61f6019d86d3a4f2ada59e648b2

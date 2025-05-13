@@ -1,15 +1,12 @@
 # from app.middlewares.auth_middleware import get_current_user
-from datetime import datetime
-from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.database.db_config import get_db
 from app.models.credits import Credit, CreditHistory, CreditUsage
-from app.schemas.user import UserInfo
 
 router = APIRouter(prefix="/credits", tags=["Credits"])
 

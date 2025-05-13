@@ -2,7 +2,7 @@ import csv
 import os
 from datetime import datetime, timezone
 from io import StringIO
-from typing import Annotated, List
+from typing import Annotated
 
 from fastapi import (
     APIRouter,
@@ -14,8 +14,8 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -27,19 +27,13 @@ from app.models.email import BulkEmailStats, TestEmail  # Import your SQLAlchemy
 from app.models.user import User
 from app.schemas.credits import CreditUsageBase
 from app.schemas.email import (  # Import your Pydantic models
-    BulkEmailStatsCreate,
     BulkEmailStatsCreateWithEmails,
     BulkEmailStatsRead,
     BulkEmailStatsResponseWithEmails,
-    BulkEmailStatsWithTestEmails,
-    SimpleEmailCheckRequest,
     TestEmailCreate,
     TestEmailRead,
-    BulkEmailStatsCreateWithEmails,
 )
-from app.schemas.user import UserResponse, UserInfo
-from app.utils.jwt_handler import get_current_user
-from app.schemas.user import UserInfo, UserResponse
+from app.schemas.user import UserInfo
 from app.utils.jwt_handler import get_current_user
 
 router = APIRouter(prefix="/email", tags=["Email Validation Functions"])
@@ -124,9 +118,7 @@ def get_test_email(test_email_id: int, db: Session = Depends(get_db)):
     Get a test email by its ID.
     """
     test_email = (
-        db.query(TestEmail)
-        .filter(TestEmail.id == test_email_id, or_(TestEmail.soft_delete.is_(False), TestEmail.soft_delete.is_(None)))
-        .first()
+        db.query(TestEmail).filter(TestEmail.id == test_email_id, or_(TestEmail.soft_delete.is_(False), TestEmail.soft_delete.is_(None))).first()
     )
     if not test_email:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test email not found")
@@ -146,16 +138,12 @@ def get_all_test_emails(db: Session = Depends(get_db)):
     """
     Get all test emails.
     """
-    test_emails = (
-        db.query(TestEmail).filter(or_(TestEmail.soft_delete.is_(None), TestEmail.soft_delete.is_(False))).all()
-    )
+    test_emails = db.query(TestEmail).filter(or_(TestEmail.soft_delete.is_(None), TestEmail.soft_delete.is_(False))).all()
     print(test_emails)
     test_email_dict = jsonable_encoder(test_emails)
     return JSONResponse(
         status_code=status.HTTP_200_OK,
-        content=jsonable_encoder(
-            {"message": "All test emails read successfully", "status_Code": status.HTTP_200_OK, "data": test_email_dict}
-        ),
+        content=jsonable_encoder({"message": "All test emails read successfully", "status_Code": status.HTTP_200_OK, "data": test_email_dict}),
     )
 
 
@@ -454,11 +442,7 @@ def get_all_bulk_email_stats(db: Session = Depends(get_db)):
     """
     Get all bulk email statistics.
     """
-    bulk_email_stats = (
-        db.query(BulkEmailStats)
-        .filter(or_(BulkEmailStats.soft_delete.is_(False), BulkEmailStats.soft_delete.is_(None)))
-        .all()
-    )
+    bulk_email_stats = db.query(BulkEmailStats).filter(or_(BulkEmailStats.soft_delete.is_(False), BulkEmailStats.soft_delete.is_(None))).all()
     bulk_email_stats_dict = jsonable_encoder(bulk_email_stats)
     return JSONResponse(
         status_code=status.HTTP_200_OK,
