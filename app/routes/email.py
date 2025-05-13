@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 # from app.utils.email_tools import check_email_reachability, validate_email_syntax
 from app.database.db_config import get_db
@@ -100,7 +100,7 @@ def create_test_email(test_email: TestEmailCreate, db: Session = Depends(get_db)
 
     try:
         db.commit()
-        db_test_email_dict = jsonable_encoder(**db_test_email.model_dump())
+        db_test_email_dict = jsonable_encoder(db_test_email)
         return JSONResponse(
             status_code=status.HTTP_201_CREATED,
             content={
@@ -143,7 +143,9 @@ def get_all_test_emails(db: Session = Depends(get_db)):
     test_email_dict = jsonable_encoder(test_emails)
     return JSONResponse(
         status_code=status.HTTP_200_OK,
-        content=jsonable_encoder({"message": "All test emails read successfully", "data": test_email_dict}),
+        content=jsonable_encoder(
+            {"message": "All test emails read successfully", "status_Code": status.HTTP_200_OK, "data": test_email_dict}
+        ),
     )
 
 

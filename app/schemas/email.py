@@ -47,7 +47,6 @@ class TestEmailBase(BaseModel):
     implicit_mx_record: Optional[str] = None
     score: int
     soft_delete: bool
-    created_at: datetime
 
 
 # Models for creating data (request bodies)
