@@ -1,6 +1,6 @@
 import csv, os
 from io import StringIO
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, status, Body
 from fastapi import UploadFile, File
@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models.credits import Credit
+from app.models.credits import Credit, CreditUsage
 from app.models.email import BulkEmailStats, TestEmail  # Import your SQLAlchemy models
 from app.models.user import User
 from app.schemas.email import (  # Import your Pydantic models
@@ -20,16 +20,12 @@ from app.schemas.email import (  # Import your Pydantic models
     BulkEmailStatsResponseWithEmails,
 )
 from app.schemas.user import UserInfo
+from app.schemas.credits import CreditUsageBase
 
 
 # Bulk email serivces
 
-
-def create_bulk_email_stats_from_file(
-    db: Session,
-    current_user: UserInfo,
-    file: UploadFile = File(...)
-):
+def create_bulk_email_stats_from_file(db: Session, current_user: UserInfo, file: UploadFile = File(...)):
     # ✅ Step 1: Read and extract emails from file
     try:
         contents = file.file.read().decode("utf-8")
@@ -42,13 +38,12 @@ def create_bulk_email_stats_from_file(
             emails = [line.strip().lower() for line in contents.splitlines() if line.strip()]
         else:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Unsupported file type. Only CSV and TXT are allowed."
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported file type. Only CSV and TXT are allowed."
             )
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not read the uploaded file. Make sure it's properly formatted."
+            detail="Could not read the uploaded file. Make sure it's properly formatted.",
         )
     finally:
         file.file.close()
@@ -60,10 +55,7 @@ def create_bulk_email_stats_from_file(
     email_count = len(emails)
     credit = db.query(Credit).filter(Credit.user_id == current_user.user_Id).first()
     if not credit or credit.remaining_credits < email_count:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient credits to test all emails"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient credits to test all emails")
 
     total_emails = len(emails)
     unique_emails = set(emails)
@@ -91,7 +83,7 @@ def create_bulk_email_stats_from_file(
         is_risky=risky_count > 0,
         deliverable=deliverable_percent,
         total=total_emails,
-        created_at=datetime.utcnow()
+        created_at=datetime.utcnow(),
     )
     db.add(bulk_stat)
     db.commit()
@@ -135,6 +127,16 @@ def create_bulk_email_stats_from_file(
     credit.total_credits -= email_count
     credit.last_updated = datetime.utcnow()
     db.add(credit)
+    
+    credit_used = CreditUsageBase(
+        user_id=current_user.user_Id,
+        email_or_file_id=bulk_stat.id,
+        quantity_used=email_count,
+        credits_used=email_count,
+        created_at=datetime.now(timezone.utc),
+    )
+    db_credit_used = CreditUsage(**credit_used.model_dump())
+    db.add(db_credit_used)
 
     try:
         db.commit()
@@ -147,15 +149,12 @@ def create_bulk_email_stats_from_file(
                     file_id=bulk_stat.id,
                     file_name=bulk_stat.file_name,
                     test_emails=[e.user_tested_email for e in test_email_objs],
-                ).dict()
-            }
+                ).dict(),
+            },
         )
     except IntegrityError:
         db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not save email records"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Could not save email records")
 
 
 def create_bulk_email_stats(
@@ -245,6 +244,16 @@ def create_bulk_email_stats(
     credit.total_credits -= email_count
     credit.last_updated = datetime.utcnow()
     db.add(credit)
+    
+    credit_used = CreditUsageBase(
+        user_id=current_user.user_Id,
+        email_or_file_id=bulk_stat.id,
+        quantity_used=email_count,
+        credits_used=email_count,
+        created_at=datetime.now(timezone.utc),
+    )
+    db_credit_used = CreditUsage(**credit_used.model_dump())
+    db.add(db_credit_used)
 
     try:
         db.commit()
@@ -267,6 +276,7 @@ def create_bulk_email_stats(
             detail="Could not save email records",
         )
 
+
 def get_bulk_email_stats_by_id(bulk_email_id: int, db: Session):
     """
     Get bulk email statistics by ID, including associated test emails.
@@ -287,14 +297,13 @@ def get_bulk_email_stats_by_id(bulk_email_id: int, db: Session):
     ]  # Convert each TestEmail to TestEmailRead
     result_dict = jsonable_encoder(result)
     return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content={
-                "message": "Bulk email stat found successfully",
-                "data": result_dict
-            },
-        )
+        status_code=status.HTTP_200_OK,
+        content={"message": "Bulk email stat found successfully", "data": result_dict},
+    )
+
 
 # Single Email Services
+
 
 def create_single_email(test_email: TestEmailCreate, db: Session):
     """
@@ -321,8 +330,8 @@ def create_single_email(test_email: TestEmailCreate, db: Session):
 
     # Deduct 1 credit
     credit.remaining_credits -= 1
-    credit.last_updated = datetime.utcnow()
     credit.total_credits -= 1
+    credit.last_updated = datetime.utcnow()
     credit.last_updated = datetime.utcnow()
 
     # 🔥 Explicitly re-add credit so SQLAlchemy tracks it
@@ -332,17 +341,25 @@ def create_single_email(test_email: TestEmailCreate, db: Session):
     db_test_email = TestEmail(**test_email.dict())
     db_test_email.created_at = datetime.utcnow()
     db.add(db_test_email)
+    db.commit()
+    db.refresh(db_test_email)
+
+    credit_used = CreditUsageBase(
+        user_id=db_test_email.user_id,
+        email_or_file_id=db_test_email.id,
+        quantity_used=1,
+        credits_used=1,
+        created_at=datetime.now(timezone.utc),
+    )
+    db_credit_used = CreditUsage(**credit_used.model_dump())
+    db.add(db_credit_used)
 
     try:
         db.commit()
-        db.refresh(db_test_email)
         db_test_email_dict = jsonable_encoder(db_test_email)
         return JSONResponse(
             status_code=status.HTTP_201_CREATED,
-            content={
-                "message": "Test email created successfully",
-                "data": db_test_email_dict
-            },
+            content={"message": "Test email created successfully", "data": db_test_email_dict},
         )
     except IntegrityError:
         db.rollback()

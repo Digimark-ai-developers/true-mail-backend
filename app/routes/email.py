@@ -1,6 +1,6 @@
-from typing import List
+from typing import List, Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status, Body, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Body, UploadFile, File, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, joinedload
@@ -114,7 +114,33 @@ def get_all_bulk_email_stats(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# import your Credit model
+@router.put("/filename_update/", tags=["Bulk"])
+async def update_filename(
+    session: Annotated[Session, Depends(get_db)],
+    old_filename: str = Query(),
+    new_filename: str = Query(),
+    current_user: UserInfo = Depends(get_current_user),
+):
+    """Updating file name"""
+    db_filename = (
+        session.query(BulkEmailStats)
+        .filter(BulkEmailStats.file_name == old_filename, BulkEmailStats.user_id == current_user.user_Id)
+        .first()
+    )
+    if not db_filename:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found.")
+
+    db_filename.file_name = new_filename
+    session.commit()
+    session.refresh(db_filename)
+
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={"Message": "File name changed succesfully.", "data": db_filename.file_name},
+    )
+
+
+# Single email endpoints
 @router.post(
     "/test_email/",
     status_code=status.HTTP_201_CREATED,
