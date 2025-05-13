@@ -70,7 +70,7 @@ def handle_webhook(payload: bytes, sig_header: str, db: Session):
 
     try:
         event_data = json.loads(payload.decode("utf-8"))
-        print("Raw JSON from StripeXXX:", json.dumps(event_data, indent=2))
+        print("Raw JSON from Stripe:", json.dumps(event_data, indent=2))
     except Exception as e:
         print("Failed to parse raw payload:", str(e))
 
@@ -91,7 +91,7 @@ def handle_webhook(payload: bytes, sig_header: str, db: Session):
             existing_credit = db.query(Credit).filter_by(user_id=user_id).first()
             number = uuid.uuid4().hex[:12]  # 12-character hex string
 
-            existing_credit.is_paid = (True,)
+            existing_credit.is_paid = True
 
             existing_credit.total_credits += credits
             existing_credit.remaining_credits += credits
