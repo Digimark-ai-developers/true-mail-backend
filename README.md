@@ -51,6 +51,7 @@ true-mail-backend/
 │   │   └── user.py                   # User models
 │   ├── routes/
 │   │   └── email.py                  # e-mail api for check bulk and single 
+│   │   └── credit.py                 # credit use , purchase, and history call
 │   │   └── subscription_stripe.py  
 │   │   ├── auth.py                   # Auth routes (login, signup, etc.)
 │   │   └── user.py                   # User management routes

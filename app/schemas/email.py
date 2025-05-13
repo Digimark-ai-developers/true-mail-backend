@@ -91,16 +91,29 @@ class BulkEmailStatsWithTestEmails(BulkEmailStatsRead):
 
     model_config = ConfigDict(from_attributes=True)
 
+class BulkEmailStatsCreate(BulkEmailStatsBase):
+    user_id: str  # Make user_id required for creation
+
+
+class SimpleEmailCheckRequest(BaseModel):
+    user_tested_email: str
+
 
 class BulkEmailStatsCreateWithEmails(BaseModel):
-    test_emails: List[str] = Field(..., description="List of email addresses to be tested")
+    test_emails: List[str] = Field(
+        ..., description="List of email addresses to be tested"
+    )
 
     class Config:
         schema_extra = {
             "example": {
                 "user_id": "user_123",
                 "file_name": "marketing_emails_may.csv",
-                "test_emails": ["john@example.com", "jane@example.com", "john@example.com"],
+                "test_emails": [
+                    "john@example.com",
+                    "jane@example.com",
+                    "john@example.com",
+                ],
             }
         }
 
