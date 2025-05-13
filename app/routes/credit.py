@@ -47,7 +47,12 @@ def get_credit_usage(user_id: str, db: Session = Depends(get_db)):
     usage = db.query(CreditUsage).filter(CreditUsage.user_id == user_id).all()
     usage_dict = jsonable_encoder(usage)
     return JSONResponse(
-        status_code=status.HTTP_302_FOUND, content={"message": "Credit usage found successfully.", "data": usage_dict}
+        status_code=status.HTTP_302_FOUND,
+        content={
+            "message": "Credit usage found successfully.",
+            "Status_Code": status.HTTP_302_FOUND,
+            "data": usage_dict,
+        },
     )
 
 
@@ -57,7 +62,11 @@ def get_credit_history(user_id: str, db: Session = Depends(get_db)):
     history_dict = jsonable_encoder(history)
     return JSONResponse(
         status_code=status.HTTP_302_FOUND,
-        content={"message": "Credit history found successfully.", "data": history_dict},
+        content={
+            "message": "Credit history found successfully.",
+            "Status_Code": status.HTTP_302_FOUND,
+            "data": history_dict,
+        },
     )
 
 
@@ -69,5 +78,9 @@ def get_credit_balance(user_id: str, db: Session = Depends(get_db)):
     credit_dict = jsonable_encoder(credit)
     return JSONResponse(
         status_code=status.HTTP_302_FOUND,
-        content={"message": "Credit Balance found successfully.", "data": credit_dict},
+        content={
+            "message": "Credit Balance found successfully.",
+            "Status_Code": status.HTTP_302_FOUND,
+            "data": credit_dict,
+        },
     )

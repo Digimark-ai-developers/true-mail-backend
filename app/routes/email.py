@@ -100,11 +100,13 @@ def create_test_email(test_email: TestEmailCreate, db: Session = Depends(get_db)
 
     try:
         db.commit()
+        db.refresh(db_test_email)
         db_test_email_dict = jsonable_encoder(db_test_email)
         return JSONResponse(
             status_code=status.HTTP_201_CREATED,
             content={
                 "Message": "Email tested succesfully.",
+                "Status_Code": status.HTTP_201_CREATED,
                 "data": db_test_email_dict,
             },
         )
@@ -121,13 +123,21 @@ def get_test_email(test_email_id: int, db: Session = Depends(get_db)):
     """
     Get a test email by its ID.
     """
-    test_email = db.query(TestEmail).filter(TestEmail.id == test_email_id, TestEmail.soft_delete == False).first()
+    test_email = (
+        db.query(TestEmail)
+        .filter(TestEmail.id == test_email_id, or_(TestEmail.soft_delete.is_(False), TestEmail.soft_delete.is_(None)))
+        .first()
+    )
     if not test_email:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test email not found")
-    test_email_dict = jsonable_encoder(**test_email.model_dump())
+    test_email_dict = jsonable_encoder(test_email)
     return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content={"data": test_email_dict},
+        status_code=status.HTTP_302_FOUND,
+        content={
+            "message": "Test email found successfully.",
+            "Status_Code": status.HTTP_302_FOUND,
+            "data": test_email_dict,
+        },
     )
 
 
@@ -284,6 +294,7 @@ def upload_bulk_email_file(
             status_code=status.HTTP_201_CREATED,
             content={
                 "message": "Bulk email stats created successfully from file",
+                "Status_Code": status.HTTP_201_CREATED,
                 "data": BulkEmailStatsResponseWithEmails(
                     user_id=current_user.user_Id,
                     file_id=bulk_stat.id,
@@ -412,6 +423,7 @@ def create_bulk_email_stats_with_emails(
             status_code=status.HTTP_201_CREATED,
             content={
                 "message": "Bulk email stats created successfully",
+                "Status_Code": status.HTTP_201_CREATED,
                 "data": BulkEmailStatsResponseWithEmails(
                     user_id=current_user.user_Id,
                     file_id=bulk_stat.id,
@@ -450,7 +462,11 @@ def get_all_bulk_email_stats(db: Session = Depends(get_db)):
     bulk_email_stats_dict = jsonable_encoder(bulk_email_stats)
     return JSONResponse(
         status_code=status.HTTP_200_OK,
-        content={"message": "Read all bulk stats successfully.", "data": bulk_email_stats_dict},
+        content={
+            "message": "Read all bulk stats successfully.",
+            "Status_Code": status.HTTP_200_OK,
+            "data": bulk_email_stats_dict,
+        },
     )
 
 
@@ -464,9 +480,10 @@ def get_user(user_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     user_dict = jsonable_encoder(user)
     return JSONResponse(
-        status_code=status.HTTP_200_OK,
+        status_code=status.HTTP_302_FOUND,
         content={
             "message": "Bulk email stats read successfully",
+            "Status_Code": status.HTTP_302_FOUND,
             "data": user_dict,
         },
     )
@@ -500,6 +517,7 @@ async def update_filename(
         status_code=status.HTTP_202_ACCEPTED,
         content={
             "Message": "File name changed succesfully.",
+            "Status_Code": status.HTTP_202_ACCEPTED,
             "data": db_filename.file_name,
         },
     )
@@ -530,7 +548,11 @@ async def test_email_delete(
     db_test_email_dict = jsonable_encoder(db_test_email)
     return JSONResponse(
         status_code=status.HTTP_200_OK,
-        content={"message": "Test email deleted successfully.", "data": db_test_email_dict},
+        content={
+            "message": "Test email deleted successfully.",
+            "Status_Code": status.HTTP_200_OK,
+            "data": db_test_email_dict,
+        },
     )
 
 
@@ -572,6 +594,7 @@ async def delete_bulk_stats(
         content=jsonable_encoder(
             {
                 "message": "Bulk stats have been deleted successfully.",
+                "Status_Code": status.HTTP_200_OK,
                 "File_data": BulkEmailStatsRead.model_validate(db_bulk_stats).model_dump(),
                 "File_emails": [TestEmailRead.model_validate(email).model_dump() for email in db_test_emails],
             }
