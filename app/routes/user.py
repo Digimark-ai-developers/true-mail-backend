@@ -13,7 +13,7 @@ from app.schemas.auth import UserInfo
 from app.schemas.user import UserProfileRead, UserProfileUpdate
 from app.utils.jwt_handler import get_current_user
 
-router = APIRouter()
+router = APIRouter(prefix="/user", tags=["User "])
 
 
 @router.get("/{user_id}", response_model=UserProfileRead)
@@ -46,18 +46,18 @@ def update_user_profile(
     return user
 
 
-@router.delete("/{user_id}")
-def delete_user(user_id: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.user_id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-        )
+# @router.delete("/{user_id}")
+# def delete_user(user_id: str, db: Session = Depends(get_db)):
+#     user = db.query(User).filter(User.user_id == user_id).first()
+#     if not user:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+#         )
 
-    user.deleted_at = datetime.utcnow()
-    user.status = False
-    db.commit()
-    return {"detail": "User marked as deleted"}
+#     user.deleted_at = datetime.utcnow()
+#     user.status = False
+#     db.commit()
+#     return {"detail": "User marked as deleted"}
 
 
 @router.get("/", response_model=list[UserProfileRead])

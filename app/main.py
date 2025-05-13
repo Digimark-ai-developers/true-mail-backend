@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import auth, user, email
+
 # from app.middlewares.auth_middleware import AuthMiddleware
 from app.database.db_config import create_database  # Import create_database function
+from app.routes import auth, credit, email, user
 
 
 @asynccontextmanager
@@ -15,6 +17,7 @@ async def lifespan(app: FastAPI):
     yield  # Application is running here
     # Code to execute during application shutdown
     print("Application is shutting down...")
+
 
 app = FastAPI(lifespan=lifespan)
 
@@ -32,6 +35,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(email.router)
+app.include_router(credit.router)
 
 
 # Health Check Route

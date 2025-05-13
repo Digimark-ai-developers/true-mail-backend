@@ -24,7 +24,7 @@ from app.schemas.email import (  # Import your Pydantic models
 from app.schemas.user import UserInfo, UserResponse
 from app.utils.jwt_handler import get_current_user
 
-router = APIRouter()
+router = APIRouter(prefix="/email", tags=["Email Validation Functions"])
 # User Endpoints
 
 
@@ -32,7 +32,7 @@ router = APIRouter()
     "/bulk_email_stats_with_emails/",
     # response_model=BulkEmailStatsResponseWithEmails,
     status_code=status.HTTP_201_CREATED,
-    summary="Create Bulk Email Stats with Test Emails and Deduct Credits",
+    summary="Create Bulk Email(Copy / Past Function) Stats with Test Emails and Deduct Credits",
     description="Creates a bulk email stats record with associated test emails, while deducting user credits per email.",
 )
 def create_bulk_email_stats_with_emails(
