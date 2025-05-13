@@ -17,3 +17,4 @@ class CheckoutSessionRequest(BaseModel):
     card_title: str
     card_price: int
     user_id: str
+    credits: int

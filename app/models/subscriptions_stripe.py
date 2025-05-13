@@ -30,7 +30,7 @@ class Invoices(Base):
     amount = Column(DECIMAL)
     number = Column(String)
     tax = Column(DECIMAL(8, 2))
-    status = Column(String)
+    status = Column(Boolean, default=False)
     card_country = Column(String(255))
     billing_state = Column(String(255))
     billing_zip = Column(String(255))

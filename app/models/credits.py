@@ -18,7 +18,7 @@ class Credit(Base):
     __tablename__ = "credits"
 
     credit_id = Column(BigInteger, primary_key=True, index=True)
-    user_id = Column(String, ForeignKey("user.user_id"), nullable=False)
+    user_id = Column(String, ForeignKey("user.user_id"), nullable=False, unique=True)
     is_paid = Column(Boolean, default=False)
     total_credits = Column(Integer)
     remaining_credits = Column(Integer)

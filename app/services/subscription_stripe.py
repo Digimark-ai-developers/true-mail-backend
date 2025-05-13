@@ -1,13 +1,12 @@
 from datetime import datetime, timedelta, timezone
 import json
+import uuid
 import stripe
 from sqlalchemy.orm import Session
 from app.models.subscriptions_stripe import Invoices
 from app.models.user import User
 from app.models.credits import Credit, CreditHistory
 from dotenv import load_dotenv
-import random
-
 
 load_dotenv()
 
@@ -16,11 +15,15 @@ load_dotenv()
 # YOUR_DOMAIN = os.getenv("FRONTEND_DOMAIN")
 
 stripe.api_key = "sk_test_51PY76e2MGeqNp340z0BavRh70aMrc5NqSmof5lIAXPzSfgpPBWOUg5YQo8ICUmHyXZhmFDogyklDoG90gmuEFcw400JIZnaQiI"
-endpoint_secret = "whsec_282f3a4ad56bc05adbeaa907b181be408135945a8f6c3286a7b75fc9c2bf677f"
-YOUR_DOMAIN = "http://127.0.0.1:8000"
+endpoint_secret = (
+    "whsec_282f3a4ad56bc05adbeaa907b181be408135945a8f6c3286a7b75fc9c2bf677f"
+)
+YOUR_DOMAIN = "http://127.0.0.1:8002"
 
 
-def create_checkout_session(email: str, card_title: str, card_price: int, user_id: str):
+def create_checkout_session(
+    email: str, card_title: str, card_price: int, user_id: str, credits: int
+):
     try:
         session = stripe.checkout.Session.create(
             payment_method_types=["card"],
@@ -43,12 +46,15 @@ def create_checkout_session(email: str, card_title: str, card_price: int, user_i
             success_url=f"{YOUR_DOMAIN}/docs",
             cancel_url=f"{YOUR_DOMAIN}",
             metadata={
-                "user_id": user_id  # Adding user_id as metadata
+                "user_id": str(user_id),  # Adding user_id as metadata
+                "credits": str(credits),
             },
-
         )
-        print("session", session)
-        return session.url
+        return {
+            "message": "Stripe checkout session URL generated successfully",
+            "status_code": 200,
+            "checkout_url": session.url,
+        }
     except Exception as e:
         raise Exception(f"Stripe error: {str(e)}")
 
@@ -73,39 +79,42 @@ def handle_webhook(payload: bytes, sig_header: str, db: Session):
         data_object = event["data"]["object"]
         print("Event type:", event_type)
 
-        user_id = data_object.get("metadata", {}).get("user_id")
-        print("User ID from metadata:", user_id)
-
-        if event_type == "checkout.session.completed":
+        if event_type == "checkout.session.completed" or event_type == "charge.updated":
+            user_id = data_object.get("metadata", {}).get("user_id")
+            credits_str = data_object.get("metadata", {}).get("credits")
+            credits = int(credits_str) if credits_str is not None else 0
+            print("User ID from metadata:", user_id)
+            print("Credits from metadata:", credits)
             email = data_object.get("customer_email")
             amount_total = data_object.get("amount_total")
 
             existing_credit = db.query(Credit).filter_by(user_id=user_id).first()
-            number = random.randint(1000000, 9999999)  # 7-digit number
-            new_credit = Credit(
-                user_id=user_id,
-                is_paid=True,
-                total_credits=(existing_credit.total_credits if existing_credit else 0) + amount_total,
-                remaining_credits=amount_total,
-                created_at=datetime.now(timezone.utc),
-                last_updated=datetime.now(timezone.utc),
-                expires_at=datetime.now(timezone.utc) + timedelta(days=730),
+            number = uuid.uuid4().hex[:12]  # 12-character hex string
+
+            existing_credit.is_paid = (True,)
+
+            existing_credit.total_credits += credits
+            existing_credit.remaining_credits += credits
+            existing_credit.last_updated = datetime.now(timezone.utc)
+            existing_credit.expires_at = datetime.now(timezone.utc) + timedelta(
+                days=730
             )
 
             new_credit_history = CreditHistory(
                 user_id=user_id,
-                credits_purchased=666,
+                credits_purchased=credits,
                 amount=amount_total,
                 purchased_at=datetime.now(timezone.utc),
             )
+
             new_invoice = Invoices(
                 user_id=user_id,
                 amount=amount_total,
                 number=number,
-                status="paid",
+                status=True,
                 created_at=datetime.now(timezone.utc),
             )
-            db.add(new_credit)
+
             db.add(new_credit_history)
             db.add(new_invoice)
 
@@ -118,7 +127,11 @@ def handle_webhook(payload: bytes, sig_header: str, db: Session):
                 user.status = "payment_failed"
                 db.commit()
 
-        return {"success": True}
+        return {
+            "message": "Stripe webhook processed successfully",
+            "status_code": 200,
+            "success": True,
+        }
 
     except Exception as e:
         print("Stripe error occurred:", str(e))
