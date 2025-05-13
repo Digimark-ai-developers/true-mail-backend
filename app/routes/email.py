@@ -139,7 +139,7 @@ def get_all_test_emails(db: Session = Depends(get_db)):
 @router.post(
     "/bulk_email_stats_with_emails/upload",
     summary="Upload a file (.csv or .txt) to create bulk email stats",
-    tags=["BulkEmails"],
+    tags=["Bulk-Emails Uplaod By File (.csv, .txt .....)"],
 )
 def upload_bulk_email_file(
     file: UploadFile = File(...),
@@ -531,7 +531,7 @@ def get_all_bulk_email_stats(db: Session = Depends(get_db)):
     return bulk_email_stats
 
 
-@router.put("/filename_update/", tags=["Bulk"])
+@router.put("/filename_update/", tags=["E-mail File Name update "])
 async def update_filename(
     session: Annotated[Session, Depends(get_db)],
     old_filename: str = Query(),
