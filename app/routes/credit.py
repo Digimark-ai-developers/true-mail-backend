@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
 from app.database.db_config import get_db
@@ -44,13 +45,20 @@ router = APIRouter(prefix="/credits", tags=["Credits"])
 @router.get("/usage/{user_id}", summary="Get all credit usage for user")
 def get_credit_usage(user_id: str, db: Session = Depends(get_db)):
     usage = db.query(CreditUsage).filter(CreditUsage.user_id == user_id).all()
-    return usage
+    usage_dict = jsonable_encoder(usage)
+    return JSONResponse(
+        status_code=status.HTTP_302_FOUND, content={"message": "Credit usage found successfully.", "data": usage_dict}
+    )
 
 
 @router.get("/history/{user_id}", summary="Get credit purchase history")
 def get_credit_history(user_id: str, db: Session = Depends(get_db)):
     history = db.query(CreditHistory).filter(CreditHistory.user_id == user_id).all()
-    return history
+    history_dict = jsonable_encoder(history)
+    return JSONResponse(
+        status_code=status.HTTP_302_FOUND,
+        content={"message": "Credit history found successfully.", "data": history_dict},
+    )
 
 
 @router.get("/balance/{user_id}", summary="Get current credit balance")
@@ -58,9 +66,8 @@ def get_credit_balance(user_id: str, db: Session = Depends(get_db)):
     credit = db.query(Credit).filter(Credit.user_id == user_id).first()
     if not credit:
         raise HTTPException(status_code=404, detail="Credit not found")
-    return {
-        "total_credits": credit.total_credits,
-        "remaining_credits": credit.remaining_credits,
-        "last_updated": credit.last_updated,
-        "expires_at": credit.expires_at,
-    }
+    credit_dict = jsonable_encoder(credit)
+    return JSONResponse(
+        status_code=status.HTTP_302_FOUND,
+        content={"message": "Credit Balance found successfully.", "data": credit_dict},
+    )
