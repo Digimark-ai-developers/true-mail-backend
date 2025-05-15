@@ -10,6 +10,7 @@ from app.schemas.credit import (
     CreditBalanceResponseWrapper,
     CreditHistoryResponseWrapper,
     CreditUsageResponseWrapper,
+    CreditUsageResponse
 )
 
 
@@ -27,7 +28,8 @@ def get_credit_balance(user: UserID = Depends(get_current_user), db: Session = D
 def get_credit_usage(user: UserID = Depends(get_current_user), db: Session = Depends(get_db)):
     service = CreditService(db)
     usage_data = service.fetch_credit_usage(user.user_Id)
-    return CreditUsageResponseWrapper(message="Credit usage found successfully", status=status.HTTP_200_OK, data=usage_data)
+    usage_data_list = [CreditUsageResponse.model_validate(item) for item in usage_data]
+    return CreditUsageResponseWrapper(message="Credit usage found successfully", status=status.HTTP_200_OK, data=usage_data_list)
 
 
 @router.get("/history", summary="Get credit purchase history", response_model=CreditHistoryResponseWrapper)

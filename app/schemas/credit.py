@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 from datetime import datetime
 
@@ -21,13 +21,13 @@ class CreditBalanceResponseWrapper(BaseModel):
 
 
 class CreditUsageResponse(BaseModel):
-    id: int
+    usage_id: int
     user_id: str
-    usage_type: str
+    email_or_file_id: int
     credits_used: int
     created_at: Optional[datetime]
 
-    model_config = {"from_attributes": True}  # <- this replaces orm_mode = True in Pydantic v2
+    model_config = ConfigDict(from_attributes= True)  # <- this replaces orm_mode = True in Pydantic v2
 
 
 class CreditUsageResponseWrapper(BaseModel):
