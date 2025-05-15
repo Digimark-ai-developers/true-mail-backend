@@ -25,7 +25,7 @@ class BulkEmailStats(Base):
     total_valid_emails = Column(Integer)  # how much total valid e-mail
     email_status = Column(Text)  # e-mail status is { completed, Cancel, Processing }
     deliverable = Column(Float)  # is e-mail deliverable
-    is_risky = Column(Boolean)  # is that e-mail is risky
+    # is_risky = Column(Boolean)  # is that e-mail is risky
     total = Column(Integer)  # total e-mail in files are check
     created_at = Column(DateTime)
     soft_delete = Column(Boolean)
@@ -46,6 +46,7 @@ class TestEmail(Base):
     reason = Column(String)  # Accepeted e-mail
     domain = Column(String(255))  # e-mail domain e.g google, yahoo,
     is_free = Column(Boolean)  # is free
+    is_risky = Column(Boolean)  # is that e-mail is risky
     is_valid = Column(Boolean)  # is e-mail valid or invalid
     is_disposable = Column(Boolean)  # is that e-mail DEA
     is_deliverable = Column(Boolean)  # is e-mail deliverable

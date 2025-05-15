@@ -31,6 +31,7 @@ class TestEmailBase(BaseModel):
     reason: Optional[str] = None
     domain: str
     is_free: bool
+    is_risky: bool
     is_valid: bool
     is_disposable: bool
     is_deliverable: bool
@@ -65,6 +66,7 @@ class TestEmailResponse(BaseModel):
     reason: Optional[str] = None
     domain: str
     is_free: bool
+    is_risky: bool
     is_valid: bool
     is_disposable: bool
     is_deliverable: bool
@@ -89,6 +91,11 @@ class TestEmailResponseWrapper(BaseModel):
     status: int
     data: TestEmailResponse
 
+class dowloadFileWrapper(BaseModel):
+    message: str
+    status: int
+    data: List[TestEmailResponse]
+
 
 class AllTestEmaislByUserId(BaseModel):
     message: str
@@ -111,11 +118,15 @@ class AllTestEmailsByFileResponseWrapper(BaseModel):
 
 
 class FileStatsResponse(BaseModel):
+    total: int
+    duplicates: int
+    deliverable: int
+    undeliverable: int
+    risky: int
     duplicated_percentage: float
     deliverable_percentage: float
     undeliverable_percentage: float
     risky_percentage: float
-    total: int
 
 
 class FileStatsResponseWrapper(BaseModel):

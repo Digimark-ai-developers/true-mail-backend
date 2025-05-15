@@ -131,7 +131,6 @@ class EmailService:
             file_name=file.filename,
             duplicate_email=duplicate_count,
             total_valid_emails=total_valid,
-            is_risky=risky_count > 0,
             deliverable=deliverable_percent,
             total=total_emails,
             created_at=datetime.now(timezone.utc),
@@ -153,6 +152,7 @@ class EmailService:
                 reason="N/A",
                 domain="unknown.com",
                 is_free=False,
+                is_risky=False,
                 is_valid=False,
                 is_disposable=False,
                 is_deliverable=False,
@@ -235,17 +235,22 @@ class EmailService:
             self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.is_deliverable.is_(True)).count()
         )
 
-        risky_count = self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.reason == "Risky").count()
+        risky_count = self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.is_risky.is_(True)).count()
 
         undeliverable_count = total_emails - deliverable_count
 
         return {
             "total": total_emails,
+            "duplicates": duplicate_count,
+            "deliverable": deliverable_count,
+            "undeliverable": undeliverable_count,
+            "risky": risky_count,
             "duplicated_percentage": round((duplicate_count / total_emails) * 100, 2),
             "deliverable_percentage": round((deliverable_count / total_emails) * 100, 2),
             "undeliverable_percentage": round((undeliverable_count / total_emails) * 100, 2),
             "risky_percentage": round((risky_count / total_emails) * 100, 2),
         }
+
 
     def create_bulk_email_with_copy_paste(self, payload: BulkEmailStatsCreateWithEmails, user_id: str):
         email_count = len(payload.test_emails)
@@ -282,7 +287,6 @@ class EmailService:
             file_name="Copy/Paste",
             duplicate_email=duplicate_count,
             total_valid_emails=total_valid,
-            is_risky=False,
             deliverable=deliverable_percent,
             total=total_emails,
             soft_delete=False,
@@ -422,3 +426,17 @@ class EmailService:
         self.db.commit()
         self.db.refresh(bulk_emails)
         return bulk_emails
+
+    def get_emails_for_csv(self, file_id: int, user_id: str, include_risky: bool):
+        query = self.db.query(TestEmail).filter(
+            TestEmail.file_id == file_id,
+            TestEmail.user_id == user_id,
+            TestEmail.soft_delete.is_(False)
+        )
+
+        if include_risky is False:
+            query = query.filter(TestEmail.is_risky.is_(False))
+        elif include_risky is True:
+            query = query.filter(TestEmail.is_risky.is_(True))
+
+        return query.all()

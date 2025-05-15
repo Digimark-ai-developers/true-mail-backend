@@ -23,6 +23,7 @@ from app.schemas.email import (
     TestEmailResponse,
     TestEmailResponseWrapper,
     TestEmailWrapper,
+    dowloadFileWrapper,
 )
 from app.schemas.email import (  # Import your Pydantic models
     BulkEmailStatsCreateWithEmails,
@@ -203,4 +204,23 @@ async def delete_bulk_emails_file(
         "message": "Bulk emails file have been deleted successfully.",
         "Status_Code": status.HTTP_200_OK,
         "data": BulkEmailStatsRead.model_validate(deleted_file),
+    }
+
+
+@router.get("/emails_for_csv/{file_id}", response_model=dowloadFileWrapper)
+def get_emails_for_csv(
+    file_id: int,
+    include_risky: bool = Query(True),
+    db: Session = Depends(get_db),
+    user: UserID = Depends(get_current_user),
+):
+    service = EmailService(db)
+    emails = service.get_emails_for_csv(file_id, user.user_Id, include_risky)
+    return {
+        "message": "Emails fetched successfully.",
+        "status": status.HTTP_200_OK,
+        "data": [
+            TestEmailResponse.model_validate(jsonable_encoder(email))
+            for email in emails
+            ],
     }
