@@ -1,10 +1,11 @@
-import jwt
 from datetime import datetime, timedelta
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
+import jwt
 from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+
 from app.schemas.auth import UserInfo
 from app.utils.firebase import verify_firebase_token
-
 
 SECRET_KEY = "VqgYZ=mhQa8VTq75-)t6V|m3;o!4@nG$+KsX[;*;$$?[S_c=?!'qTU5*hMC*p*|C"
 ALGORITHM = "HS256"

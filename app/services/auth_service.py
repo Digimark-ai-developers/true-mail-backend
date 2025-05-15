@@ -1,5 +1,11 @@
-from sqlalchemy.orm import Session
+# app/services/auth_service.py
+from datetime import datetime, timedelta
+
 from fastapi import HTTPException
+from firebase_admin import auth as firebase_auth
+from firebase_admin._auth_utils import UserNotFoundError  # Import this
+from sqlalchemy.orm import Session
+
 from app.models.credits import Credit
 from app.models.user import User
 from app.schemas.auth import UserRegisterRequest
@@ -55,6 +61,17 @@ class AuthService:
                 last_updated=datetime.now(timezone.utc),
                 expires_at=datetime.now(timezone.utc) + timedelta(days=730),
             )
+            credit_entry = Credit(
+                user_id=firebase_user.uid,
+                is_paid=False,
+                total_credits=100,  # add free credits to the use
+                remaining_credits=100,  # and remaining credits of uesr
+                created_at=datetime.utcnow(),
+                last_updated=datetime.utcnow(),
+                expires_at=datetime.utcnow() + timedelta(days=365),  # 1 years
+            )
+
+            self.db.add(credit_entry)
 
             self.db.add(credit_entry)
             self.db.add(new_user)

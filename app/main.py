@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes import auth, subscription_stripe, user
 
 # from app.middlewares.auth_middleware import AuthMiddleware
 from app.database.db_config import create_database  # Import create_database function
+from app.routes import auth, credit, email, user
 
 
 @asynccontextmanager

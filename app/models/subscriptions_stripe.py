@@ -1,6 +1,7 @@
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, ForeignKey, DECIMAL
-from app.database.db_config import Base
+from sqlalchemy import DECIMAL, Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship
+
+from app.database.db_config import Base
 
 
 class SubscriptionsStripe(Base):

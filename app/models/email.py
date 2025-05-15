@@ -9,6 +9,7 @@ from sqlalchemy import (
     Float,
 )
 from sqlalchemy.orm import relationship
+
 from app.database.db_config import Base
 
 
@@ -26,6 +27,7 @@ class BulkEmailStats(Base):
     total = Column(Integer)
     soft_delete = Column(Boolean)
     created_at = Column(DateTime)
+    soft_delete = Column(Boolean)
 
     user = relationship("User", backref="bulk_emails_stats")
 
@@ -61,6 +63,7 @@ class TestEmail(Base):
     score = Column(Integer)
     soft_delete = Column(Boolean)
     created_at = Column(DateTime)
+    soft_delete = Column(Boolean)
 
     user = relationship("User", backref="test_emails")
     bulk_email_stats = relationship("BulkEmailStats", backref="test_emails")
