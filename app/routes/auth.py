@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+
 from app.database.db_config import get_db
 
 # from app.schemas.user import UserInfo
-from app.schemas.auth import UserRegisterRequest, UserID, UserInfo
+from app.schemas.auth import UserID, UserInfo, UserRegisterRequest
 from app.services.auth_service import AuthService
 from app.utils.jwt_handler import create_jwt_token, get_current_user
 from fastapi import Body
@@ -15,11 +16,13 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.get("/me", response_model=UserInfo)
 async def get_logged_in_user(user: UserID = Depends(get_current_user)):
+    print(user.user_Id)
     return user
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register_user(user_data: UserRegisterRequest, db: Session = Depends(get_db)):
+
     service = AuthService(db)
     try:
         service.register_user(user_data)
