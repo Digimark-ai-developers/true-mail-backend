@@ -21,7 +21,9 @@ def create_jwt_token(data: dict):
     return encoded_jwt
 
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> UserInfo:
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> UserInfo:
     try:
         id_token = credentials.credentials
         decoded_token = verify_firebase_token(id_token)  # Verifies with Firebase

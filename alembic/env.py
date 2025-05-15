@@ -7,6 +7,8 @@ from alembic import context
 # Import your SQLAlchemy models' Base
 from app.database.db_config import Base  # this includes declarative_base()
 
+from app.models import email, user, subscriptions_stripe, credits  # noqa: F401
+
 target_metadata = Base.metadata
 
 # Load env vars from .env
