@@ -4,10 +4,10 @@ from sqlalchemy.orm import relationship
 
 
 class SubscriptionsStripe(Base):
-    __tablename__ = 'subscriptions_stripe'
+    __tablename__ = "subscriptions_stripe"
 
     subscription_id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, ForeignKey('user.user_id'))
+    user_id = Column(String, ForeignKey("user.user_id"))
     stripe_subscription_id = Column(String)
     stripe_customer_id = Column(String)
     subscription_plan = Column(String)
@@ -18,18 +18,19 @@ class SubscriptionsStripe(Base):
     created_at = Column(DateTime)
     ended_at = Column(DateTime)
 
-    user = relationship('User', backref='subscriptions_stripe')
+    user = relationship("User", backref="subscriptions_stripe")
 
 
 class Invoices(Base):
-    __tablename__ = 'invoices'
+    __tablename__ = "invoices"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(String, ForeignKey('user.user_id'))
+    user_id = Column(String, ForeignKey("user.user_id"))
     total = Column(DECIMAL(8, 2))
     amount = Column(DECIMAL)
     number = Column(String)
     tax = Column(DECIMAL(8, 2))
+    status = Column(Boolean, default=False)
     card_country = Column(String(255))
     billing_state = Column(String(255))
     billing_zip = Column(String(255))
@@ -39,4 +40,4 @@ class Invoices(Base):
     deleted_at = Column(DateTime)
     deleted_by = Column(DateTime)
 
-    user = relationship('User', backref='invoices')
+    user = relationship("User", backref="invoices")

@@ -4,8 +4,10 @@ from email.mime.multipart import MIMEMultipart
 
 
 def send_email_with_link(email, link):
-    from_email = '191370098@gift.edu.pk'  # Replace with your Gmail address
-    from_password = 'jxpc cjsg ktvr qjbq'     # Replace with your Gmail password (or App Password)
+    from_email = "191370098@gift.edu.pk"  # Replace with your Gmail address
+    from_password = (
+        "jxpc cjsg ktvr qjbq"  # Replace with your Gmail password (or App Password)
+    )
     try:
         # Create the email
         message = MIMEMultipart()

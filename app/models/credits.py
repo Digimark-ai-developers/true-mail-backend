@@ -1,4 +1,14 @@
-from sqlalchemy import Column, BigInteger, String, ForeignKey, Boolean, DateTime, DECIMAL, Integer, Float
+from sqlalchemy import (
+    Column,
+    BigInteger,
+    String,
+    ForeignKey,
+    Boolean,
+    DateTime,
+    DECIMAL,
+    Integer,
+    Float
+)
 from sqlalchemy.orm import relationship
 from app.database.db_config import Base
 from datetime import datetime
@@ -8,7 +18,7 @@ class Credit(Base):
     __tablename__ = "credits"
 
     credit_id = Column(BigInteger, primary_key=True, index=True)
-    user_id = Column(String, ForeignKey("user.user_id"), nullable=False)
+    user_id = Column(String, ForeignKey("user.user_id"), nullable=False, unique=True)
     is_paid = Column(Boolean, default=False)
     total_credits = Column(Integer)
     remaining_credits = Column(Integer)

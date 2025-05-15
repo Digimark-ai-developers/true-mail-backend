@@ -20,21 +20,23 @@ def create_jwt_token(data: dict):
     return encoded_jwt
 
 
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> UserInfo:
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+) -> UserInfo:
     try:
         id_token = credentials.credentials
         decoded_token = verify_firebase_token(id_token)  # Verifies with Firebase
 
         return UserInfo(
-            user_Id=decoded_token.get('uid'),
-            email=decoded_token.get('email'),
-            first_name=decoded_token.get('name', ''),
+            user_Id=decoded_token.get("uid"),
+            email=decoded_token.get("email"),
+            first_name=decoded_token.get("name", ""),
             last_name="",  # Firebase doesn't provide separate last name
-            photoURL=decoded_token.get('picture', '')
+            photoURL=decoded_token.get("picture", ""),
         )
 
     except Exception as err:
-        print('Firebase token verification failed:', err)
+        print("Firebase token verification failed:", err)
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
