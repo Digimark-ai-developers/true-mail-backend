@@ -1,59 +1,31 @@
-from datetime import datetime
-
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
-
+from app.schemas.auth import UserID
 from app.database.db_config import get_db
-from app.models.user import User
-from app.schemas.user import UserProfileUpdate
+from app.schemas.user import UserProfileReadWrapper, UserProfileUpdate, UserProfileUpdateWrapper
+from app.services.user_service import fetch_user_profile, update_user_profile
+from app.utils.jwt_handler import get_current_user
 
 router = APIRouter(prefix="/user", tags=["User "])
 
 
-@router.get("/{user_id}")
-def get_user_profile(user_id: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.user_id == user_id).first()
-    if not user:
+@router.get("/profile", response_model=UserProfileReadWrapper, summary="Get user profile")
+def get_user_profile(user: UserID = Depends(get_current_user), db: Session = Depends(get_db)):
+    profile = fetch_user_profile(user.user_Id, db)
+    if not profile:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return UserProfileReadWrapper(message="User profile retrieved successfully", status_code=status.HTTP_200_OK, data=profile)
+
+
+@router.put("/update", response_model=UserProfileUpdateWrapper, summary="Update current user profile")
+def update_user_profile_route(
+    user_data: UserProfileUpdate,
+    user: UserID = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    updated_user = update_user_profile(user.user_Id, user_data, db)
+    if not updated_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    user_dict = jsonable_encoder(user)
-    return JSONResponse(status_code=status.HTTP_302_FOUND, content={"message": "User found successfully.", "data": user_dict})
 
-
-@router.put("/{user_id}/update")
-def update_user_profile(user_id: str, user_data: UserProfileUpdate, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.user_id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-    update_fields = user_data.dict(exclude_unset=True)
-    for key, value in update_fields.items():
-        setattr(user, key, value)
-
-    user.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(user)
-    user_dict = jsonable_encoder(user)
-    return JSONResponse(status_code=status.HTTP_302_FOUND, content={"message": "User updated successfully.", "data": user_dict})
-
-
-# @router.delete("/{user_id}")
-# def delete_user(user_id: str, db: Session = Depends(get_db)):
-#     user = db.query(User).filter(User.user_id == user_id).first()
-#     if not user:
-#         raise HTTPException(
-#             status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-#         )
-
-#     user.deleted_at = datetime.utcnow()
-#     user.status = False
-#     db.commit()
-#     return {"detail": "User marked as deleted"}
-
-
-@router.get("/")
-def list_users(db: Session = Depends(get_db)):
-    users = db.query(User).filter(User.status.is_(True)).all()
-    user_dict = jsonable_encoder(users)
-    return JSONResponse(status_code=status.HTTP_302_FOUND, content={"message": "User data read successfully.", "data": user_dict})
+    return UserProfileUpdateWrapper(message="User updated successfully.", status_code=status.HTTP_200_OK, data=updated_user)
