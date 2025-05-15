@@ -7,7 +7,7 @@ from sqlalchemy import (
     DateTime,
     DECIMAL,
     Integer,
-    Float,
+    Float
 )
 from sqlalchemy.orm import relationship
 from app.database.db_config import Base
