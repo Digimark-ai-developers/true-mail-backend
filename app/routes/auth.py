@@ -13,11 +13,13 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 @router.get("/me", response_model=UserInfo)
 async def get_logged_in_user(user: UserID = Depends(get_current_user)):
+    print(user.user_Id)
     return user
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register_user(user_data: UserRegisterRequest, db: Session = Depends(get_db)):
+
     service = AuthService(db)
     return service.register_user(user_data)
 

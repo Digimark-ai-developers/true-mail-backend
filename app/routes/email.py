@@ -1,9 +1,3 @@
-import csv
-import os
-from datetime import datetime, timezone
-from io import StringIO
-from typing import Annotated
-
 from fastapi import (
     APIRouter,
     Body,
@@ -16,571 +10,197 @@ from fastapi import (
 )
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from sqlalchemy import or_
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 # from app.utils.email_tools import check_email_reachability, validate_email_syntax
 from app.database.db_config import get_db
-from app.models.credits import Credit, CreditUsage
-from app.models.email import BulkEmailStats, TestEmail  # Import your SQLAlchemy models
-from app.models.user import User
-from app.schemas.credits import CreditUsageBase
+from app.schemas.auth import UserID
+from app.schemas.email import (
+    AllTestEmailsByFileResponseWrapper,
+    AllTestEmaislByUserId,
+    FileStatsResponseWrapper,
+    TestEmailBase,
+    TestEmailResponse,
+    TestEmailResponseWrapper,
+    TestEmailWrapper,
+)
 from app.schemas.email import (  # Import your Pydantic models
     BulkEmailStatsCreateWithEmails,
     BulkEmailStatsRead,
-    BulkEmailStatsResponseWithEmails,
-    TestEmailCreate,
-    TestEmailRead,
 )
 from app.schemas.user import UserInfo
 from app.utils.jwt_handler import get_current_user
+from app.services.email_service import EmailService
+
 
 router = APIRouter(prefix="/email", tags=["Email Validation Functions"])
-# User Endpoints
 
 
-# import your Credit model
-@router.post("/test_email/", status_code=status.HTTP_201_CREATED)
-def create_test_email(test_email: TestEmailCreate, db: Session = Depends(get_db)):
-    """
-    Create a test email entry and deduct one credit.
-    """
-    # Validate user_id
-    user = db.query(User).filter(User.user_id == test_email.user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User ID not found")
+@router.post("/test_single_email", response_model=TestEmailWrapper)
+def create_single_email(test_email: TestEmailBase, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
+    service = EmailService(db)
+    email = service.create_test_email(user.user_Id, test_email)
 
-    # Validate file_id
-    if test_email.file_id is not None:
-        bulk_email_stats = db.query(BulkEmailStats).filter(BulkEmailStats.id == test_email.file_id).first()
-        if not bulk_email_stats:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File ID not found")
-
-    # Fetch credit record
-    credit = db.query(Credit).filter(Credit.user_id == test_email.user_id).first()
-    if not credit or credit.remaining_credits < 1:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient credits to test email",
-        )
-
-    # Deduct 1 credit
-    credit.remaining_credits -= 1
-    credit.last_updated = datetime.utcnow()
-    credit.total_credits -= 1
-    credit.last_updated = datetime.utcnow()
-
-    # 🔥 Explicitly re-add credit so SQLAlchemy tracks it
-    db.add(credit)
-
-    # Create TestEmail entry
-    db_test_email = TestEmail(**test_email.model_dump())
-    db_test_email.created_at = datetime.now(timezone.utc)
-    db_test_email.soft_delete = False
-    db.add(db_test_email)
-    db.commit()
-    db.refresh(db_test_email)
-
-    credit_used = CreditUsageBase(
-        user_id=db_test_email.user_id,
-        email_or_file_id=db_test_email.id,
-        quantity_used=1,
-        credits_used=1,
-        created_at=datetime.now(timezone.utc),
-    )
-    db_credit_used = CreditUsage(**credit_used.model_dump())
-    db.add(db_credit_used)
-
-    try:
-        db.commit()
-        db.refresh(db_test_email)
-        db_test_email_dict = jsonable_encoder(db_test_email)
-        return JSONResponse(
-            status_code=status.HTTP_201_CREATED,
-            content={
-                "Message": "Email tested succesfully.",
-                "Status_Code": status.HTTP_201_CREATED,
-                "data": db_test_email_dict,
-            },
-        )
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred",
-        )
-
-
-@router.get("/test_email/{test_email_id}")
-def get_test_email(test_email_id: int, db: Session = Depends(get_db)):
-    """
-    Get a test email by its ID.
-    """
-    test_email = (
-        db.query(TestEmail).filter(TestEmail.id == test_email_id, or_(TestEmail.soft_delete.is_(False), TestEmail.soft_delete.is_(None))).first()
-    )
-    if not test_email:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test email not found")
-    test_email_dict = jsonable_encoder(test_email)
-    return JSONResponse(
-        status_code=status.HTTP_302_FOUND,
-        content={
-            "message": "Test email found successfully.",
-            "Status_Code": status.HTTP_302_FOUND,
-            "data": test_email_dict,
-        },
+    return TestEmailWrapper(
+        message="Email tested successfully.",
+        status=status.HTTP_201_CREATED,
+        data=TestEmailBase.model_validate(email),  # validate from SQLAlchemy object
     )
 
 
-@router.get("/test_email/")
-def get_all_test_emails(db: Session = Depends(get_db)):
-    """
-    Get all test emails.
-    """
-    test_emails = db.query(TestEmail).filter(or_(TestEmail.soft_delete.is_(None), TestEmail.soft_delete.is_(False))).all()
-    print(test_emails)
-    test_email_dict = jsonable_encoder(test_emails)
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content=jsonable_encoder({"message": "All test emails read successfully", "status_Code": status.HTTP_200_OK, "data": test_email_dict}),
+@router.get("/test_single_email/{test_email_id}", response_model=TestEmailResponseWrapper)
+def get_single_test_email(test_email_id: int, db: Session = Depends(get_db)):
+    service = EmailService(db)
+    test_email = service.get_test_email(test_email_id)
+
+    return TestEmailResponseWrapper(
+        message="Test email found successfully.", status=status.HTTP_302_FOUND, data=TestEmailResponse.model_validate(test_email)
     )
+
+
+@router.get("/all_single_tested_emails", response_model=AllTestEmaislByUserId)
+def get_all_single_tested_emails_by_user_id(db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
+    """
+    Get all test emails for the current user.
+    """
+    service = EmailService(db)
+    test_emails = service.get_all_test_emails(user.user_Id)
+    return {"message": "All test emails read successfully.", "status": status.HTTP_200_OK, "data": jsonable_encoder(test_emails)}
 
 
 # Bulk Email Endpoints
-@router.post(
-    "/bulk_email_stats_with_emails/upload",
-    summary="Upload a file (.csv or .txt) to create bulk email stats",
-    tags=["Bulk-Emails Uplaod By File (.csv, .txt .....)"],
-)
-def upload_bulk_email_file(
+@router.post("/test_bulk_emails_with_file_upload", summary="Upload a file (.csv or .txt) to create bulk email stats")
+def upload_bulk_emails_file(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
+    user: UserInfo = Depends(get_current_user),
 ):
-    # ✅ Step 1: Read and extract emails from file
-    try:
-        contents = file.file.read().decode("utf-8")
-        extension = os.path.splitext(file.filename)[1].lower()
+    service = EmailService(db)
+    result = service.process_bulk_email_file(file, user.user_Id)
 
-        if extension == ".csv":
-            reader = csv.reader(StringIO(contents))
-            emails = [row[0].strip().lower() for row in reader if row and row[0].strip()]
-        elif extension == ".txt":
-            emails = [line.strip().lower() for line in contents.splitlines() if line.strip()]
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Unsupported file type. Only CSV and TXT are allowed.",
-            )
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not read the uploaded file. Make sure it's properly formatted.",
-        )
-    finally:
-        file.file.close()
-
-    if not emails:
-        raise HTTPException(status_code=400, detail="No valid emails found in the uploaded file.")
-
-    # ✅ Step 2: Check credit
-    email_count = len(emails)
-    credit = db.query(Credit).filter(Credit.user_id == current_user.user_Id).first()
-    if not credit or credit.remaining_credits < email_count:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient credits to test all emails",
-        )
-
-    total_emails = len(emails)
-    unique_emails = set(emails)
-    duplicate_count = total_emails - len(unique_emails)
-
-    total_valid = 0
-    risky_count = 0
-    deliverable_count = 0
-
-    for email in emails:
-        if email.endswith("@gmail.com"):
-            total_valid += 1
-            deliverable_count += 1
-        elif "test" in email:
-            risky_count += 1
-
-    deliverable_percent = (deliverable_count / total_emails) * 100 if total_emails > 0 else 0
-
-    # ✅ Step 3: Create BulkEmailStats record
-    bulk_stat = BulkEmailStats(
-        user_id=current_user.user_Id,
-        file_name=file.filename,
-        duplicate_email=duplicate_count,
-        total_valid_emails=total_valid,
-        is_risky=risky_count > 0,
-        deliverable=deliverable_percent,
-        total=total_emails,
-        created_at=datetime.now(timezone.utc),
-        soft_delete=False,
+    return JSONResponse(
+        status_code=status.HTTP_201_CREATED,
+        content={
+            "message": "Bulk emails created successfully from file",
+            "Status_Code": status.HTTP_201_CREATED,
+            "data": result.dict(),
+        },
     )
-    db.add(bulk_stat)
-    db.commit()
-    db.refresh(bulk_stat)
-
-    # ✅ Step 4: Create TestEmail entries
-    test_email_objs = []
-    for email in emails:
-        test_email_obj = TestEmail(
-            user_id=bulk_stat.user_id,
-            file_id=bulk_stat.id,
-            user_tested_email=email,
-            full_name="Unknown",
-            gender="Unknown",
-            status="Pending",
-            reason="N/A",
-            domain="unknown.com",
-            is_free=False,
-            is_valid=False,
-            is_disposable=False,
-            is_deliverable=False,
-            has_tag=False,
-            alphabetical_characters=0,
-            is_mailbox_full=False,
-            has_role=False,
-            is_accept_all=False,
-            has_numerical_characters=0,
-            has_unicode_symbols=0,
-            has_no_reply=False,
-            smtp_provider="Unknown",
-            mx_record="N/A",
-            implicit_mx_record="N/A",
-            score=0,
-            soft_delete=False,
-            created_at=datetime.now(timezone.utc),
-        )
-        db.add(test_email_obj)
-        test_email_objs.append(test_email_obj)
-
-    # ✅ Step 5: Deduct credits
-    credit.remaining_credits -= email_count
-    credit.total_credits -= email_count
-    credit.last_updated = datetime.utcnow()
-    db.add(credit)
-
-    credit_used = CreditUsageBase(
-        user_id=current_user.user_Id,
-        email_or_file_id=bulk_stat.id,
-        quantity_used=email_count,
-        credits_used=email_count,
-        created_at=datetime.now(timezone.utc),
-    )
-    db_credit_used = CreditUsage(**credit_used.model_dump())
-    db.add(db_credit_used)
-
-    try:
-        db.commit()
-        return JSONResponse(
-            status_code=status.HTTP_201_CREATED,
-            content={
-                "message": "Bulk email stats created successfully from file",
-                "Status_Code": status.HTTP_201_CREATED,
-                "data": BulkEmailStatsResponseWithEmails(
-                    user_id=current_user.user_Id,
-                    file_id=bulk_stat.id,
-                    file_name=bulk_stat.file_name,
-                    test_emails=[e.user_tested_email for e in test_email_objs],
-                ).dict(),
-            },
-        )
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not save email records",
-        )
 
 
-@router.post(
-    "/bulk_email_stats_with_emails/",
-    status_code=status.HTTP_201_CREATED,
-    summary="Create Bulk Email(Copy / Past Function) Stats with Test Emails and Deduct Credits",
-    description="Creates a bulk email stats record with associated test emails, while deducting user credits per email.",
-)
-def create_bulk_email_stats_with_emails(
+@router.post("/bulk_email_test_by_copy_paste", status_code=status.HTTP_201_CREATED)
+def create_bulk_email_by_copy_paste(
     payload: BulkEmailStatsCreateWithEmails = Body(),
     db: Session = Depends(get_db),
-    current_user: UserInfo = Depends(get_current_user),
+    user: UserInfo = Depends(get_current_user),
 ):
-    # ✅ Step 1: Validate credit availability
-    email_count = len(payload.test_emails)
-    credit = db.query(Credit).filter(Credit.user_id == current_user.user_Id).first()
-    if not credit or credit.remaining_credits < email_count:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Insufficient credits to test all emails",
-        )
+    service = EmailService(db)
+    result = service.create_bulk_email_with_copy_paste(payload, user.user_Id)
 
-    # ✅ Step 2: Create BulkEmailStats (the file)
-    emails = [email.lower() for email in payload.test_emails]
-    total_emails = len(emails)
-    unique_emails = set(emails)
-    duplicate_count = total_emails - len(unique_emails)
-
-    # Optional: Apply actual logic if you can determine these values from email content
-    total_valid = 0
-    risky_count = 0
-    deliverable_count = 0
-
-    for email in emails:
-        # Your own custom validation logic can go here
-        if email.endswith("@gmail.com"):
-            total_valid += 1
-            deliverable_count += 1
-        elif "test" in email:
-            risky_count += 1
-
-    deliverable_percent = (deliverable_count / total_emails) * 100 if total_emails > 0 else 0
-
-    bulk_stat = BulkEmailStats(
-        user_id=current_user.user_Id,
-        file_name="Copy/Paste",
-        duplicate_email=duplicate_count,
-        total_valid_emails=total_valid,
-        is_risky=False,
-        deliverable=deliverable_percent,
-        total=total_emails,
-        soft_delete=False,
-        created_at=datetime.now(timezone.utc),
-    )
-    db.add(bulk_stat)
-    db.commit()
-    db.refresh(bulk_stat)
-
-    # ✅ Step 3: Create related TestEmail entries
-    test_email_objs = []
-    for test_email in payload.test_emails:
-        test_email_obj = TestEmail(
-            user_id=bulk_stat.user_id,  # User ID from input
-            file_id=bulk_stat.id,  # The bulk email stat ID (file context)
-            user_tested_email=test_email,  # Email being tested
-            full_name="Unknown",  # Default value
-            gender="Unknown",  # Default value
-            status="Pending",  # Default value
-            reason="N/A",  # Default value
-            domain="unknown.com",  # Default value
-            is_free=False,  # Default value
-            is_valid=False,  # Default value
-            is_disposable=False,  # Default value
-            is_deliverable=False,  # Default value
-            has_tag=False,  # Default value
-            alphabetical_characters=0,  # Default value
-            is_mailbox_full=False,  # Default value
-            has_role=False,  # Default value
-            is_accept_all=False,  # Default value
-            has_numerical_characters=0,  # Default value
-            has_unicode_symbols=0,  # Default value
-            has_no_reply=False,  # Default value
-            smtp_provider="Unknown",  # Default value
-            mx_record="N/A",  # Default value
-            implicit_mx_record="N/A",  # Default value
-            score=0,  # Default value
-            soft_delete=False,
-            created_at=datetime.now(timezone.utc),  # Current time as default value
-        )
-        db.add(test_email_obj)
-        test_email_objs.append(test_email_obj)
-
-    # ✅ Step 4: Deduct credits
-    credit.remaining_credits -= email_count
-    credit.total_credits -= email_count
-    credit.last_updated = datetime.utcnow()
-    db.add(credit)
-
-    credit_used = CreditUsageBase(
-        user_id=current_user.user_Id,
-        email_or_file_id=bulk_stat.id,
-        quantity_used=email_count,
-        credits_used=email_count,
-        created_at=datetime.now(timezone.utc),
-    )
-    db_credit_used = CreditUsage(**credit_used.model_dump())
-    db.add(db_credit_used)
-
-    try:
-        db.commit()
-        return JSONResponse(
-            status_code=status.HTTP_201_CREATED,
-            content={
-                "message": "Bulk email stats created successfully",
-                "Status_Code": status.HTTP_201_CREATED,
-                "data": BulkEmailStatsResponseWithEmails(
-                    user_id=current_user.user_Id,
-                    file_id=bulk_stat.id,
-                    file_name=bulk_stat.file_name,
-                    test_emails=[email.user_tested_email for email in test_email_objs],
-                ).dict(),
-            },
-        )
-
-    except IntegrityError:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Could not save email records",
-        )
-
-
-@router.get(
-    "/bulk_email_stats/",
-    summary="Get All Bulk Email Stats",
-    description="Retrieve a list of all bulk email statistics.",
-    responses={
-        200: {"description": "List of bulk email stats retrieved successfully."},
-        500: {"description": "Internal server error."},
-    },
-)
-def get_all_bulk_email_stats(db: Session = Depends(get_db)):
-    """
-    Get all bulk email statistics.
-    """
-    bulk_email_stats = db.query(BulkEmailStats).filter(or_(BulkEmailStats.soft_delete.is_(False), BulkEmailStats.soft_delete.is_(None))).all()
-    bulk_email_stats_dict = jsonable_encoder(bulk_email_stats)
     return JSONResponse(
-        status_code=status.HTTP_200_OK,
+        status_code=status.HTTP_201_CREATED,
         content={
-            "message": "Read all bulk stats successfully.",
-            "Status_Code": status.HTTP_200_OK,
-            "data": bulk_email_stats_dict,
+            "message": "Bulk emails created successfully from copy/paste",
+            "Status_Code": status.HTTP_201_CREATED,
+            "data": result.dict(),
         },
     )
 
 
-@router.get("/users/{user_id}")
-def get_user(user_id: str, db: Session = Depends(get_db)):
-    """
-    Get a user by their ID.
-    """
-    user = db.query(User).filter(User.user_id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    user_dict = jsonable_encoder(user)
-    return JSONResponse(
-        status_code=status.HTTP_302_FOUND,
-        content={
-            "message": "Bulk email stats read successfully",
-            "Status_Code": status.HTTP_302_FOUND,
-            "data": user_dict,
-        },
-    )
+@router.get("/all_tested_bulk_emails_group_by_files", response_model=AllTestEmailsByFileResponseWrapper)
+def get_all_bulk_emails_grouped_by_files(
+    db: Session = Depends(get_db),
+    user: UserID = Depends(get_current_user),
+):
+
+    service = EmailService(db)
+    grouped_emails = service.get_all_emails_grouped_by_files(user.user_Id)
+
+    return {
+        "message": "Emails fetched successfully",
+        "status": status.HTTP_200_OK,
+        "data": [
+            {
+                "file_id": group["file_id"],
+                "file_name": group["file_name"],
+                "emails": [TestEmailResponse.model_validate(email) for email in group["emails"]],
+            }
+            for group in grouped_emails
+        ],
+    }
 
 
-@router.put("/filename_update/", tags=["E-mail File Name update "])
+@router.get("/bulk_emails_file_stats/{file_id}", response_model=FileStatsResponseWrapper)
+def get_file_stats_by_file_id(
+    file_id: int,
+    db: Session = Depends(get_db),
+    user: UserID = Depends(get_current_user),
+):
+    service = EmailService(db)
+    stats = service.get_file_stats(file_id, user.user_Id)
+
+    if not stats:
+        raise HTTPException(status_code=404, detail="File not found or no emails present")
+
+    return {
+        "message": "File stats fetched successfully.",
+        "status": status.HTTP_200_OK,
+        "data": stats,
+    }
+
+
+@router.put("/filename_update")
 async def update_filename(
-    session: Annotated[Session, Depends(get_db)],
-    old_filename: str = Query(),
-    new_filename: str = Query(),
-    current_user: UserInfo = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    file_id: int = Query(...),
+    new_filename: str = Query(...),
+    user: UserInfo = Depends(get_current_user),
 ):
-    """Updating file name"""
-    db_filename = (
-        session.query(BulkEmailStats)
-        .filter(
-            BulkEmailStats.file_name == old_filename,
-            BulkEmailStats.user_id == current_user.user_Id,
-            or_(BulkEmailStats.soft_delete.is_(None), BulkEmailStats.soft_delete.is_(False)),
-        )
-        .first()
-    )
-    if not db_filename:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found.")
-
-    db_filename.file_name = new_filename
-    session.commit()
-    session.refresh(db_filename)
+    service = EmailService(db)
+    updated_filename = service.update_file_name_by_id(file_id, new_filename, user.user_Id)
 
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
         content={
-            "Message": "File name changed succesfully.",
+            "Message": "File name changed successfully.",
             "Status_Code": status.HTTP_202_ACCEPTED,
-            "data": db_filename.file_name,
+            "data": updated_filename,
         },
     )
 
 
-# Delete functionality
-@router.delete("/test_email/delete/")
-async def test_email_delete(
-    user_test_email: str,
-    session: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[UserInfo, Depends(get_current_user)],
+@router.delete("/single_tested_email", response_model=TestEmailWrapper)
+async def delete_single_tested_email(
+    test_email_id: int = Query(...),
+    db: Session = Depends(get_db),
+    user: UserInfo = Depends(get_current_user),
 ):
-    """Deletes test_email"""
-    db_test_email = (
-        session.query(TestEmail)
-        .filter(
-            TestEmail.user_tested_email == user_test_email,
-            TestEmail.user_id == current_user.user_Id,
-            or_(TestEmail.soft_delete.is_(False), TestEmail.soft_delete.is_(None)),
-        )
-        .first()
-    )
-    if not db_test_email:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email not found.")
-    db_test_email.soft_delete = True
-    session.commit()
-    session.refresh(db_test_email)
-    db_test_email_dict = jsonable_encoder(db_test_email)
+    """Soft deletes test email by ID"""
+    service = EmailService(db)
+    deleted_email = service.soft_delete_test_email_by_id(test_email_id, user.user_Id)
+
     return JSONResponse(
         status_code=status.HTTP_200_OK,
         content={
             "message": "Test email deleted successfully.",
             "Status_Code": status.HTTP_200_OK,
-            "data": db_test_email_dict,
+            "data": deleted_email,
         },
     )
 
 
-@router.delete("/bulk_stats/delete/")
-async def delete_bulk_stats(
-    filename: str,
-    session: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[UserInfo, Depends(get_current_user)],
+@router.delete("/bulk_emails_file_by_file_id")
+async def delete_bulk_emails_file(
+    file_id: int = Query(...),
+    db: Session = Depends(get_db),
+    user: UserInfo = Depends(get_current_user),
 ):
-    """Delete bulk stats"""
-    db_bulk_stats = (
-        session.query(BulkEmailStats)
-        .filter(
-            BulkEmailStats.file_name == filename,
-            BulkEmailStats.user_id == current_user.user_Id,
-            or_(BulkEmailStats.soft_delete.is_(False), BulkEmailStats.soft_delete.is_(None)),
-        )
-        .first()
-    )
-    if not db_bulk_stats:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bulk stats not found.")
-    db_bulk_stats.soft_delete = True
-    db_test_emails = (
-        session.query(TestEmail)
-        .filter(
-            TestEmail.file_id == db_bulk_stats.id,
-            TestEmail.user_id == current_user.user_Id,
-            or_(TestEmail.soft_delete.is_(False), TestEmail.soft_delete.is_(None)),
-        )
-        .all()
-    )
-    for emails in db_test_emails:
-        emails.soft_delete = True
+    """Soft delete bulk email stats by ID"""
+    service = EmailService(db)
+    deleted_file = service.soft_delete_bulk_emails_file_by_id(file_id, user.user_Id)
 
-    session.commit()
-
-    return JSONResponse(
-        status_code=status.HTTP_200_OK,
-        content=jsonable_encoder(
-            {
-                "message": "Bulk stats have been deleted successfully.",
-                "Status_Code": status.HTTP_200_OK,
-                "File_data": BulkEmailStatsRead.model_validate(db_bulk_stats).model_dump(),
-                "File_emails": [TestEmailRead.model_validate(email).model_dump() for email in db_test_emails],
-            }
-        ),
-    )
+    return {
+        "message": "Bulk emails file have been deleted successfully.",
+        "Status_Code": status.HTTP_200_OK,
+        "data": BulkEmailStatsRead.model_validate(deleted_file),
+    }

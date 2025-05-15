@@ -1,83 +1,37 @@
 # from app.middlewares.auth_middleware import get_current_user
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, status
+from app.schemas.auth import UserID
+from app.services.credit_service import CreditService
 from sqlalchemy.orm import Session
-
 from app.database.db_config import get_db
-from app.models.credits import Credit, CreditHistory, CreditUsage
+from app.utils.jwt_handler import get_current_user
+from app.schemas.credit import (
+    CreditBalanceResponseWrapper,
+    CreditHistoryResponseWrapper,
+    CreditUsageResponseWrapper,
+)
+
 
 router = APIRouter(prefix="/credits", tags=["Credits"])
 
 
-# @router.post("/use/{user_id}", summary="Use 1 credit for email validation")
-# def use_credit(user_id: str, db: Session = Depends(get_db)):
-#     credit = db.query(Credit).filter(Credit.user_id == user_id).first()
-#     if not credit or credit.remaining_credits < 1:
-#         raise HTTPException(
-#             status_code=status.HTTP_403_FORBIDDEN,
-#             detail="Insufficient credits"
-#         )
-
-#     credit.remaining_credits -= 1
-#     credit.total_credits -= 1
-#     credit.last_updated = datetime.utcnow()
-
-#     credit_usage = CreditUsage(
-#         user_id=user_id,
-#         email_or_file_id=0,  # You can link to email ID if available
-#         quantity_used=1,
-#         credits_used=Decimal("1.00"),
-#         created_at=datetime.utcnow()
-#     )
-
-#     db.add(credit)
-#     db.add(credit_usage)
-#     db.commit()
-
-#     return {"message": "Credit used successfully"}
+@router.get("/balance", summary="Get current credit balance", response_model=CreditBalanceResponseWrapper)
+def get_credit_balance(user: UserID = Depends(get_current_user), db: Session = Depends(get_db)):
+    service = CreditService(db)
+    credit_data = service.fetch_credit_balance(user.user_Id)
+    return CreditBalanceResponseWrapper(message="Credit balance read successfully", status=status.HTTP_200_OK, data=credit_data)
 
 
-@router.get("/usage/{user_id}", summary="Get all credit usage for user")
-def get_credit_usage(user_id: str, db: Session = Depends(get_db)):
-    usage = db.query(CreditUsage).filter(CreditUsage.user_id == user_id).all()
-    usage_dict = jsonable_encoder(usage)
-    return JSONResponse(
-        status_code=status.HTTP_302_FOUND,
-        content={
-            "message": "Credit usage found successfully.",
-            "Status_Code": status.HTTP_302_FOUND,
-            "data": usage_dict,
-        },
-    )
+@router.get("/usage", summary="Get all credit usage for user", response_model=CreditUsageResponseWrapper)
+def get_credit_usage(user: UserID = Depends(get_current_user), db: Session = Depends(get_db)):
+    service = CreditService(db)
+    usage_data = service.fetch_credit_usage(user.user_Id)
+    return CreditUsageResponseWrapper(message="Credit usage found successfully", status=status.HTTP_200_OK, data=usage_data)
 
 
-@router.get("/history/{user_id}", summary="Get credit purchase history")
-def get_credit_history(user_id: str, db: Session = Depends(get_db)):
-    history = db.query(CreditHistory).filter(CreditHistory.user_id == user_id).all()
-    history_dict = jsonable_encoder(history)
-    return JSONResponse(
-        status_code=status.HTTP_302_FOUND,
-        content={
-            "message": "Credit history found successfully.",
-            "Status_Code": status.HTTP_302_FOUND,
-            "data": history_dict,
-        },
-    )
-
-
-@router.get("/balance/{user_id}", summary="Get current credit balance")
-def get_credit_balance(user_id: str, db: Session = Depends(get_db)):
-    credit = db.query(Credit).filter(Credit.user_id == user_id).first()
-    if not credit:
-        raise HTTPException(status_code=404, detail="Credit not found")
-    credit_dict = jsonable_encoder(credit)
-    return JSONResponse(
-        status_code=status.HTTP_302_FOUND,
-        content={
-            "message": "Credit Balance found successfully.",
-            "Status_Code": status.HTTP_302_FOUND,
-            "data": credit_dict,
-        },
-    )
+@router.get("/history", summary="Get credit purchase history", response_model=CreditHistoryResponseWrapper)
+def get_credit_history(user: UserID = Depends(get_current_user), db: Session = Depends(get_db)):
+    service = CreditService(db)
+    history_data = service.fetch_credit_history(user.user_Id)
+    return CreditHistoryResponseWrapper(message="Credit purchase history found successfully", status=status.HTTP_200_OK, data=history_data)

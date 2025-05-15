@@ -23,7 +23,7 @@ class BulkEmailStats(Base):
     user_tested_email = Column(Text)  # which e-mials are tested by user id
     duplicate_email = Column(Integer)  # how much duplicates in a file i numbers
     total_valid_emails = Column(Integer)  # how much total valid e-mail
-    email_status = Column(Text)  #  e-mail status is { completed, Cancel, Processing }
+    email_status = Column(Text)  # e-mail status is { completed, Cancel, Processing }
     deliverable = Column(Float)  # is e-mail deliverable
     is_risky = Column(Boolean)  # is that e-mail is risky
     total = Column(Integer)  # total e-mail in files are check
@@ -52,7 +52,7 @@ class TestEmail(Base):
     has_tag = Column(Boolean)  # e-mail has tag appended like username+tag.gmail.com
     alphabetical_characters = Column(Integer)  # how much alphabatical characters in per email
     is_mailbox_full = Column(Boolean)  #
-    has_role = Column(Boolean)  #  an e-mail address has role like support@teammail.com
+    has_role = Column(Boolean)  # an e-mail address has role like support@teammail.com
     is_accept_all = Column(Boolean)  # is that e-mail server accepetable
     has_numerical_characters = Column(Integer)  # is e-mail has numaric characters
     has_unicode_symbols = Column(Integer)  # is e-mail has unicode
