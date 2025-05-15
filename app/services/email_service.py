@@ -3,7 +3,7 @@ import os
 from typing import List
 from fastapi import HTTPException, UploadFile, status
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import func, or_
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from app.models.credits import Credit, CreditUsage
@@ -222,20 +222,17 @@ class EmailService:
 
         if total_emails == 0:
             return None
-
         duplicate_count = (
-            self.db.query(TestEmail.user_tested_email)
-            .filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id)
-            .group_by(TestEmail.user_tested_email)
-            .having(func.count(TestEmail.user_tested_email) > 1)
-            .count()
+            self.db.query(BulkEmailStats.duplicate_email).filter(BulkEmailStats.id == file_id, BulkEmailStats.user_id == user_id).scalar()
         )
 
         deliverable_count = (
             self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.is_deliverable.is_(True)).count()
         )
 
-        risky_count = self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.is_risky.is_(True)).count()
+        risky_count = (
+            self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.is_risky.is_(True)).count()
+        )
 
         undeliverable_count = total_emails - deliverable_count
 
@@ -250,7 +247,6 @@ class EmailService:
             "undeliverable_percentage": round((undeliverable_count / total_emails) * 100, 2),
             "risky_percentage": round((risky_count / total_emails) * 100, 2),
         }
-
 
     def create_bulk_email_with_copy_paste(self, payload: BulkEmailStatsCreateWithEmails, user_id: str):
         email_count = len(payload.test_emails)
@@ -428,11 +424,7 @@ class EmailService:
         return bulk_emails
 
     def get_emails_for_csv(self, file_id: int, user_id: str, include_risky: bool):
-        query = self.db.query(TestEmail).filter(
-            TestEmail.file_id == file_id,
-            TestEmail.user_id == user_id,
-            TestEmail.soft_delete.is_(False)
-        )
+        query = self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.soft_delete.is_(False))
 
         if include_risky is False:
             query = query.filter(TestEmail.is_risky.is_(False))

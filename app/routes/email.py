@@ -219,8 +219,5 @@ def get_emails_for_csv(
     return {
         "message": "Emails fetched successfully.",
         "status": status.HTTP_200_OK,
-        "data": [
-            TestEmailResponse.model_validate(jsonable_encoder(email))
-            for email in emails
-            ],
+        "data": [TestEmailResponse.model_validate(jsonable_encoder(email)) for email in emails],
     }

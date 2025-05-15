@@ -91,6 +91,7 @@ class TestEmailResponseWrapper(BaseModel):
     status: int
     data: TestEmailResponse
 
+
 class dowloadFileWrapper(BaseModel):
     message: str
     status: int
