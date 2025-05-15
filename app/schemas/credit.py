@@ -21,9 +21,9 @@ class CreditBalanceResponseWrapper(BaseModel):
 
 
 class CreditUsageResponse(BaseModel):
-    id: int
+    usage_id: int
     user_id: str
-    usage_type: str
+    email_or_file_id: int
     credits_used: int
     created_at: Optional[datetime]
 

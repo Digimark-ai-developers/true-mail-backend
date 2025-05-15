@@ -308,6 +308,7 @@ class EmailService:
                 is_valid=False,
                 is_disposable=False,
                 is_deliverable=False,
+                is_risky=False,
                 has_tag=False,
                 alphabetical_characters=0,
                 is_mailbox_full=False,
