@@ -164,10 +164,11 @@ cython_debug/
 #.idea/
 .env.production
 *.db
-.vercel
 *flake8
 .flake8
 *.flake8
 .pre-commit-config.yaml
 *.pre-commit-config.yaml
 *pre-commit-config.yaml
+.vercel
+.yaml
