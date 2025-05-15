@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database.db_config import get_db
 
@@ -21,7 +21,15 @@ async def get_logged_in_user(user: UserID = Depends(get_current_user)):
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 def register_user(user_data: UserRegisterRequest, db: Session = Depends(get_db)):
     service = AuthService(db)
-    return service.register_user(user_data)
+    try:
+        service.register_user(user_data)
+        return {
+            "message": "User registered successfully. Please verify your email.",
+            "status_code": status.HTTP_201_CREATED,
+        }
+    except Exception as e:
+        # you can customize error handling here if needed
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/login")
@@ -36,16 +44,26 @@ def login_user(
 
     return {
         "message": "Login successful",
-        "status_code": 200,
+        "status_code": status.HTTP_200_OK,
         "access_token": token,
-        "token_type": "bearer",
     }
 
 
 @router.post("/forgot-password")
 def forgot_password(email: str, db: Session = Depends(get_db)):
     auth_service = AuthService(db)
-    return auth_service.send_password_reset_email(email)
+    try:
+        auth_service.send_password_reset_email(email)
+        return {
+            "message": "Password reset email sent successfully.",
+            "status_code": status.HTTP_200_OK,
+        }
+    except HTTPException as e:
+        # re-raise so FastAPI handles HTTPException properly
+        raise e
+    except Exception as e:
+        # catch other errors if you want, or let them propagate
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.post("/change-password")
@@ -55,5 +73,8 @@ async def change_password(
     current_user=Depends(get_current_user),
 ):
     auth_service = AuthService(db)
-
-    return auth_service.change_password(current_user.user_Id, payload.new_password)
+    result = auth_service.change_password(current_user.user_Id, payload.new_password)
+    return {
+        "message": result["message"],
+        "status_code": status.HTTP_200_OK,
+    }
