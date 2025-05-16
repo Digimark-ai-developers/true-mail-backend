@@ -1,4 +1,4 @@
-# app/schemas/auth.py
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 
 from pydantic import BaseModel, EmailStr
@@ -37,6 +37,10 @@ class UserRegisterResponse(BaseModel):
 
 class UserID(BaseModel):
     user_id: str
+
+
+class ChangePasswordRequest(BaseModel):
+    new_password: str = Field(..., min_length=6, example="NewSecurePass123")
 
 
 class UserInfo(BaseModel):

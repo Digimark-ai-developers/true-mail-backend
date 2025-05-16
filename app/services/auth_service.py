@@ -11,6 +11,9 @@ from app.models.user import User
 from app.schemas.auth import UserRegisterRequest
 from app.utils.email_service import send_email_with_link
 from app.utils.firebase import verify_firebase_token
+from firebase_admin import auth as firebase_auth
+from firebase_admin._auth_utils import UserNotFoundError  # Import this
+from datetime import datetime, timedelta, timezone
 
 
 class AuthService:
@@ -27,11 +30,11 @@ class AuthService:
                 photo_url=user_data.photoURL,
             )
 
-            # ✅ Generate email verification link from Firebase
+            # Generate email verification link and send email
             link = firebase_auth.generate_email_verification_link(user_data.email)
             send_email_with_link(user_data.email, link)
 
-            # Step 2: Save user to local DB
+            # Save user to local DB
             new_user = User(
                 user_id=firebase_user.uid,
                 email=user_data.email,
@@ -44,10 +47,19 @@ class AuthService:
                 country=user_data.country,
                 state=user_data.state,
                 zip_code=str(user_data.zip_code),
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
                 deleted_at=None,
                 deleted_by=None,
+            )
+            credit_entry = Credit(
+                user_id=firebase_user.uid,
+                is_paid=False,
+                total_credits=100,
+                remaining_credits=100,
+                created_at=datetime.now(timezone.utc),
+                last_updated=datetime.now(timezone.utc),
+                expires_at=datetime.now(timezone.utc) + timedelta(days=730),
             )
             credit_entry = Credit(
                 user_id=firebase_user.uid,
@@ -61,18 +73,16 @@ class AuthService:
 
             self.db.add(credit_entry)
 
+            self.db.add(credit_entry)
             self.db.add(new_user)
             self.db.commit()
 
-            return {
-                "message": "User registered successfully. Please verify your email.",
-                "status_code": 201,
-            }
+            return True  # or return any data you want
 
         except Exception as e:
             self.db.rollback()
             print(e)
-            raise HTTPException(status_code=400, detail=str(e))
+            raise e  # just re-raise the exception
 
     def login_user(self, id_token: str) -> User:
         try:
@@ -101,21 +111,18 @@ class AuthService:
 
     def send_password_reset_email(self, email: str):
         try:
-            # Optional: verify if user exists first
+            # Optional: check if user exists
             firebase_auth.get_user_by_email(email)
 
             reset_link = firebase_auth.generate_password_reset_link(email)
             send_email_with_link(email, reset_link)
-            return {
-                "message": "Password reset email sent successfully.",
-                "status_code": 200,
-            }
+
+            return True  # or any data you want to return
 
         except UserNotFoundError:
             raise HTTPException(
                 status_code=404, detail="Email not found in Firebase Authentication."
             )
-
         except Exception as e:
             raise HTTPException(
                 status_code=400, detail=f"Failed to send password reset email: {str(e)}"
@@ -124,7 +131,7 @@ class AuthService:
     def change_password(self, uid: str, new_password: str):
         try:
             firebase_auth.update_user(uid, password=new_password)
-            return {"message": "Password updated successfully.", "status_code": 200}
+            return {"message": "Password updated successfully."}
         except Exception as e:
             raise HTTPException(
                 status_code=400, detail=f"Failed to change password: {str(e)}"

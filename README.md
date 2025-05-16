@@ -16,12 +16,6 @@ OR in Mac/Linux
 source .venv/bin/activate
 ```
 
-## Install Requirements
-
-```bash
-pip install -r requirements.txt
-```
-
 ## Run Command
 
 ```bash
@@ -34,7 +28,6 @@ OR run the following to specify port number and to allow all host:
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ```
-
 
 ```
 true-mail-backend/
@@ -50,27 +43,27 @@ true-mail-backend/
 │   │   ├── subscriptions_stripe.py   # Stripe subscription models
 │   │   └── user.py                   # User models
 │   ├── routes/
-│   │   └── email.py                  # e-mail api for check bulk and single 
-│   │   └── credit.py                 # credit use , purchase, and history call
-│   │   └── subscription_stripe.py  
+│   │   ├── email.py                  # e-mail api for check bulk and single
+│   │   ├── credit.py                 # credit use , purchase, and history call
+│   │   ├── subscription_stripe.py
 │   │   ├── auth.py                   # Auth routes (login, signup, etc.)
 │   │   └── user.py                   # User management routes
 │   ├── schemas/
-│   │   └── email.py                  # email schema
+│   │   ├── email.py                  # email schema
 │   │   ├── auth.py                   # Auth-related Pydantic schemas
 │   │   ├── otp.py                    # OTP-related schemas
 │   │   └── user.py                   # User schemas
 │   ├── services/
 │   │   ├── auth_services.py          # Authentication services
-│   │   └── subscription_stripe.py    # subscription for stripe
+│   │   ├── subscription_stripe.py    # subscription for stripe
 │   │   └── user_services.py          # User services (profile update, etc.)
 │   ├── utils/
-│   │   └── email_validator.py        # Email validation utility
-│   │   └── firebase.py               # for firebase auth 
-│   │   └── jwt_handler.py  
-│   │   └── jwt.py  
-│   ├── main.py                       # FastAPI app entry point
+│   │   ├── email_validator.py        # Email validation utility
+│   │   ├── firebase.py               # for firebase auth
+│   │   ├── jwt_handler.py
+│   │   └── jwt.py
+│   └── main.py                       # FastAPI app entry point
 ├── requirements.txt                  # Project dependencies
 ├── .env                               # Environment variables
-└── README.md 
+└── README.md
 ```
