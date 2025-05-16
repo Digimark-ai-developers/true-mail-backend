@@ -1,0 +1,16 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-5 text-center">
+    <h3>Validation Complete</h3>
+    <p class="lead">You can download the results below:</p>
+
+    <div class="d-grid gap-3 col-6 mx-auto">
+        <a href="/download/{{ valid_file }}" class="btn btn-success btn-lg" download>
+            Download Valid Emails
+        </a>
+        <a href="/download/{{ invalid_file }}" class="btn btn-danger btn-lg" download>
+            Download Invalid Emails
+        </a>
+    </div>
+</div>
+{% endblock %}

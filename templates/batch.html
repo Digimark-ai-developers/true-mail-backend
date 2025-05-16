@@ -1,0 +1,58 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container mt-5">
+    <h2>Batch Email Validator</h2>
+    <form id="batchForm" method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+            <label for="file">Upload CSV File</label>
+            <input type="file" class="form-control" name="file" accept=".csv" required>
+        </div>
+        {% if columns %}
+        <div class="form-group mt-3">
+            <label for="email_column">Select Email Column</label>
+            <select class="form-control" name="email_column">
+                {% for col in columns %}
+                <option value="{{ col }}" {% if col == selected_column %}selected{% endif %}>{{ col }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+        <div class="form-group mt-3">
+            <label for="sender_email">Sender Email</label>
+            <input type="email" class="form-control" id="sender_email" name="sender_email" value="test@example.com">
+        </div>
+        <button type="submit" class="btn btn-success mt-3">Start Validation</button>
+    </form>
+
+    <div id="progressContainer" class="mt-5" style="display:none;">
+        <h5>Processing Emails...</h5>
+        <div class="progress">
+            <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%;">0%</div>
+        </div>
+        <p id="progressText" class="mt-2"></p>
+    </div>
+</div>
+
+<script>
+    document.getElementById("batchForm").addEventListener("submit", function() {
+        document.getElementById("progressContainer").style.display = "block";
+        const progressBar = document.getElementById("progressBar");
+        const progressText = document.getElementById("progressText");
+
+        const interval = setInterval(() => {
+            fetch("/batch-progress")
+                .then(response => response.json())
+                .then(data => {
+                    if (data.length > 0) {
+                        const last = data[data.length - 1];
+                        const percent = Math.round((last.processed / last.total) * 100);
+                        progressBar.style.width = percent + "%";
+                        progressBar.innerText = percent + "%";
+                        progressText.innerText = `Processed ${last.processed} of ${last.total} emails`;
+                        if (last.processed >= last.total) clearInterval(interval);
+                    }
+                });
+        }, 1000);
+    });
+</script>
+{% endblock %}
