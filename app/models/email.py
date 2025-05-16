@@ -27,6 +27,7 @@ class BulkEmailStats(Base):
     deliverable = Column(Float)  # is e-mail deliverable
     is_risky = Column(Boolean)  # is that e-mail is risky
     total = Column(Integer)  # total e-mail in files are check
+    soft_delete = Column(Boolean)
     created_at = Column(DateTime)
 
     user = relationship("User", backref="bulk_emails_stats")
@@ -65,6 +66,7 @@ class TestEmail(Base):
     implicit_mx_record = Column(String(255))  # implicit mx record
     score = Column(Integer)  # e-mail socre
     created_at = Column(DateTime)
+    soft_delete = Column(Boolean)
 
     user = relationship("User", backref="test_emails")
     bulk_email_stats = relationship("BulkEmailStats", backref="test_emails")
