@@ -102,11 +102,11 @@ async def batch_progress():
     return {"progress": progress}
 
 
+# get_download_file
 @app.get("/download/{filename}")
 async def download_file(filename: str):
     file_path = os.path.join(UPLOAD_FOLDER, filename)
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     return StreamingResponse(open(file_path, "rb"), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={filename}"})
-
 
