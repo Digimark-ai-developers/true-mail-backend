@@ -1,7 +1,9 @@
 import os
+from logging.config import fileConfig
+
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
-from logging.config import fileConfig
+
 from alembic import context
 
 # Load env vars from .env
@@ -20,9 +22,10 @@ fileConfig(config.config_file_name)
 from app.database.db_config import Base  # this includes declarative_base()
 
 # Import all models so Alembic can detect them
-from app.models import user,subscriptions_stripe, email
+from app.models import email, subscriptions_stripe, user
 
 target_metadata = Base.metadata
+
 
 def run_migrations_offline():
     url = config.get_main_option("sqlalchemy.url")
@@ -45,10 +48,7 @@ def run_migrations_online():
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()
@@ -58,4 +58,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-    

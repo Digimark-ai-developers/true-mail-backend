@@ -1,11 +1,12 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Body, Depends, status
 from sqlalchemy.orm import Session
+
 from app.database.db_config import get_db
+
 # from app.schemas.user import UserInfo
-from app.schemas.auth import UserRegisterRequest, UserID, UserInfo
+from app.schemas.auth import UserID, UserInfo, UserRegisterRequest
 from app.services.auth_service import AuthService
 from app.utils.jwt_handler import create_jwt_token, get_current_user
-from fastapi import Body
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -24,17 +25,14 @@ def register_user(user_data: UserRegisterRequest, db: Session = Depends(get_db))
 @router.post("/login")
 def login_user(
     id_token: str = Body(..., embed=True),  # expects {"id_token": "..."}
-    db=Depends(get_db)
+    db=Depends(get_db),
 ):
     auth_service = AuthService(db)
     user = auth_service.login_user(id_token)
 
     token = create_jwt_token({"user_Id": user.user_id})
 
-    return {
-        "access_token": token,
-        "token_type": "bearer"
-    }
+    return {"access_token": token, "token_type": "bearer"}
 
 
 @router.post("/forgot-password")
