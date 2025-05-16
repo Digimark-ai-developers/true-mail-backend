@@ -65,7 +65,7 @@ class TestEmailResponse(BaseModel):
     reason: Optional[str] = None
     domain: str
     is_free: bool
-    is_risky: bool
+    is_risky: Optional[bool] = None
     is_valid: bool
     is_disposable: bool
     is_deliverable: bool

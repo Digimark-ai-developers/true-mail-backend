@@ -1,14 +1,4 @@
-from sqlalchemy import (
-    Column,
-    BigInteger,
-    String,
-    ForeignKey,
-    Boolean,
-    DateTime,
-    DECIMAL,
-    Integer,
-    Float
-)
+from sqlalchemy import Column, BigInteger, String, ForeignKey, Boolean, DateTime, DECIMAL, Integer, Float
 from sqlalchemy.orm import relationship
 from app.database.db_config import Base
 from datetime import datetime
