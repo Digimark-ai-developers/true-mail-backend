@@ -133,6 +133,7 @@ class EmailService:
             file_name=file.filename,
             duplicate_email=duplicate_count,
             total_valid_emails=total_valid,
+            status = "Completed",
             deliverable=deliverable_percent,
             total=total_emails,
             created_at=datetime.now(timezone.utc),
@@ -237,18 +238,24 @@ class EmailService:
         )
 
         undeliverable_count = total_emails - deliverable_count
+        bulk_email = self.db.query(BulkEmailStats).filter(BulkEmailStats.id == file_id, BulkEmailStats.user_id == user_id).first()
 
         return {
+            "id": bulk_email.id,
+            "file_name": bulk_email.file_name,
             "total": total_emails,
             "duplicates": duplicate_count,
             "deliverable": deliverable_count,
             "undeliverable": undeliverable_count,
             "risky": risky_count,
+            "status": bulk_email.status,
             "duplicated_percentage": round((duplicate_count / total_emails) * 100, 2),
             "deliverable_percentage": round((deliverable_count / total_emails) * 100, 2),
             "undeliverable_percentage": round((undeliverable_count / total_emails) * 100, 2),
             "risky_percentage": round((risky_count / total_emails) * 100, 2),
+            "uploaded_at": bulk_email.created_at,
         }
+
 
     def create_bulk_email_with_copy_paste(self, payload: BulkEmailStatsCreateWithEmails, user_id: str):
         email_count = len(payload.test_emails)
@@ -435,3 +442,28 @@ class EmailService:
             query = query.filter(TestEmail.is_risky.is_(True))
 
         return query.all()
+    def get_all_files_with_delieved_emails_and_status(self, user_id: str):
+        files = self.db.query(BulkEmailStats).filter(BulkEmailStats.user_id == user_id).all()
+        result = []
+
+        for file in files:
+            total_emails = (
+                self.db.query(TestEmail)
+                .filter(TestEmail.file_id == file.id, TestEmail.user_id == user_id)
+                .count()
+            )
+
+            deliverable_count = (
+                self.db.query(TestEmail)
+                .filter(TestEmail.file_id == file.id, TestEmail.user_id == user_id, TestEmail.is_deliverable.is_(True))
+                .count()
+            )
+
+            result.append({
+                "file_name": file.file_name,
+                "total_emails": total_emails,
+                "deliverable": deliverable_count,
+                "status": file.status,
+            })
+
+        return result

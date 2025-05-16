@@ -18,6 +18,7 @@ from app.schemas.auth import UserID
 from app.schemas.email import (
     AllTestEmailsByFileResponseWrapper,
     AllTestEmaislByUserId,
+    FileStatsResponse,
     FileStatsResponseWrapper,
     TestEmailBase,
     TestEmailResponse,
@@ -220,4 +221,15 @@ def get_emails_for_csv(
         "message": "Emails fetched successfully.",
         "status": status.HTTP_200_OK,
         "data": [TestEmailResponse.model_validate(jsonable_encoder(email)) for email in emails],
+    }
+
+
+@router.get("all_files_with_delieved_emails_and_status", response_model=FileStatsResponse)
+def get_user_files(user: UserInfo = Depends(get_current_user), db: Session = Depends(get_db)):
+    service = EmailService(db)
+    files_data = service.get_all_files_with_delieved_emails_and_status(user.user_Id)
+    return {
+        "message": "Files fetched successfully.",
+        "status": status.HTTP_200_OK,
+        "data": files_data
     }

@@ -22,7 +22,7 @@ class BulkEmailStats(Base):
     user_tested_email = Column(Text)
     duplicate_email = Column(Integer)  # how much duplicates in a file i numbers
     total_valid_emails = Column(Integer)
-    email_status = Column(Text)
+    status = Column(String)
     deliverable = Column(Float)
     total = Column(Integer)
     soft_delete = Column(Boolean)

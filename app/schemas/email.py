@@ -118,16 +118,19 @@ class AllTestEmailsByFileResponseWrapper(BaseModel):
 
 
 class FileStatsResponse(BaseModel):
+    id: int
+    file_name: str
     total: int
     duplicates: int
     deliverable: int
     undeliverable: int
     risky: int
+    status: str
     duplicated_percentage: float
     deliverable_percentage: float
     undeliverable_percentage: float
     risky_percentage: float
-
+    uploaded_at: datetime
 
 class FileStatsResponseWrapper(BaseModel):
     message: str
@@ -194,3 +197,18 @@ class BulkEmailStatsResponseWithEmails(BaseModel):
     file_id: int
     file_name: str
     test_emails: list[str]
+
+
+
+class FileStats(BaseModel):
+    id: int
+    file_name: str
+    total_emails: int
+    deliverable: int
+    status: str
+
+
+class FileStatsResponse(BaseModel):
+    message: str
+    status: int
+    data: List[FileStats]
