@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from app.services.subscription_stripe import PaymentService
 from app.database.db_config import get_db
-from app.schemas.subcription_stripe import CheckoutSessionRequest, UserInfo
+from app.schemas.subcription_stripe import CheckoutSessionRequest, GetInvoicesWrapper, UserInfo
 from app.utils.jwt_handler import get_current_user
 from sqlalchemy.orm import Session
 
@@ -17,9 +17,7 @@ async def create_session(
     db: Session = Depends(get_db),
 ):
     service = PaymentService(db)
-    checkout_url = service.create_checkout_session(
-        user.email, data.card_title, data.card_price, user.user_Id, data.credits
-    )
+    checkout_url = service.create_checkout_session(user.email, data.card_title, data.card_price, user.user_Id, data.credits)
     return {
         "message": "Stripe checkout session created successfully.",
         "status_code": status.HTTP_200_OK,
@@ -47,3 +45,10 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         raise he
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/invoices", response_model=GetInvoicesWrapper)
+async def get_invoices(user: UserInfo = Depends(get_current_user), db: Session = Depends(get_db)):
+    service = PaymentService(db)
+    invoices = service.get_invoices(user.user_Id)
+    return {"message": "Invoices fetched successfully.", "status_code": status.HTTP_200_OK, "data": invoices}

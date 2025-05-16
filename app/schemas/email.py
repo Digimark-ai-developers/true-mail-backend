@@ -17,7 +17,6 @@ class BulkEmailStatsBase(BaseModel):
     total_valid_emails: int
     email_status: Optional[str] = None  # Added can be None for testing purposes
     deliverable: float
-    is_risky: bool
     total: int
     soft_delete: bool
     created_at: datetime
@@ -66,7 +65,7 @@ class TestEmailResponse(BaseModel):
     reason: Optional[str] = None
     domain: str
     is_free: bool
-    is_risky: bool
+    is_risky: Optional[bool] = None
     is_valid: bool
     is_disposable: bool
     is_deliverable: bool

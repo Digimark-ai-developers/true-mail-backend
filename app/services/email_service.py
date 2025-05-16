@@ -60,10 +60,12 @@ class EmailService:
                 detail="Database error occurred",
             )
 
-    def get_test_email(self, test_email_id: int):
+    def get_test_email(self, test_email_id: int, user_id: str):
         test_email = (
             self.db.query(TestEmail)
-            .filter(TestEmail.id == test_email_id, or_(TestEmail.soft_delete.is_(False), TestEmail.soft_delete.is_(None)))
+            .filter(
+                TestEmail.id == test_email_id, TestEmail.user_id == user_id, or_(TestEmail.soft_delete.is_(False), TestEmail.soft_delete.is_(None))
+            )
             .first()
         )
         if not test_email:
@@ -305,6 +307,7 @@ class EmailService:
                 reason="N/A",
                 domain="unknown.com",
                 is_free=False,
+                is_risky=False,
                 is_valid=False,
                 is_disposable=False,
                 is_deliverable=False,

@@ -21,10 +21,11 @@ class CreditBalanceResponseWrapper(BaseModel):
 
 
 class CreditUsageResponse(BaseModel):
-    id: int
+    usage_id: int
     user_id: str
-    usage_type: str
-    credits_used: int
+    email_or_file_id: int
+    quantity_used: int
+    credits_used: float  # since you use DECIMAL(8,2)
     created_at: Optional[datetime]
 
     model_config = {"from_attributes": True}  # <- this replaces orm_mode = True in Pydantic v2

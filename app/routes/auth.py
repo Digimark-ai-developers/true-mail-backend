@@ -81,3 +81,12 @@ async def change_password(
         "message": result["message"],
         "status_code": status.HTTP_200_OK,
     }
+
+
+@router.delete("/delete", status_code=status.HTTP_200_OK)
+def delete_user_account(
+    user: UserID = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    service = AuthService(db)
+    return service.delete_firebase_user(uid=user.user_Id, email=user.email)

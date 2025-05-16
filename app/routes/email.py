@@ -50,9 +50,9 @@ def create_single_email(test_email: TestEmailBase, db: Session = Depends(get_db)
 
 
 @router.get("/test_single_email/{test_email_id}", response_model=TestEmailResponseWrapper)
-def get_single_test_email(test_email_id: int, db: Session = Depends(get_db)):
+def get_single_test_email(test_email_id: int, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
     service = EmailService(db)
-    test_email = service.get_test_email(test_email_id)
+    test_email = service.get_test_email(test_email_id, user.user_Id)
 
     return TestEmailResponseWrapper(
         message="Test email found successfully.", status=status.HTTP_302_FOUND, data=TestEmailResponse.model_validate(test_email)

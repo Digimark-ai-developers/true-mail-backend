@@ -1,18 +1,14 @@
 # app/services/auth_service.py
-from datetime import datetime, timedelta
-
-from fastapi import HTTPException
+from firebase_admin import auth
+from fastapi import HTTPException, status
 from firebase_admin import auth as firebase_auth
 from firebase_admin._auth_utils import UserNotFoundError  # Import this
 from sqlalchemy.orm import Session
-
 from app.models.credits import Credit
 from app.models.user import User
 from app.schemas.auth import UserRegisterRequest
 from app.utils.email_service import send_email_with_link
 from app.utils.firebase import verify_firebase_token
-from firebase_admin import auth as firebase_auth
-from firebase_admin._auth_utils import UserNotFoundError  # Import this
 from datetime import datetime, timedelta, timezone
 
 
@@ -100,9 +96,7 @@ class AuthService:
             # Fetch user from local DB
             user = self.db.query(User).filter(User.user_id == uid).first()
             if not user:
-                raise HTTPException(
-                    status_code=404, detail="User not found. Please register first."
-                )
+                raise HTTPException(status_code=404, detail="User not found. Please register first.")
 
             return user
 
@@ -120,19 +114,25 @@ class AuthService:
             return True  # or any data you want to return
 
         except UserNotFoundError:
-            raise HTTPException(
-                status_code=404, detail="Email not found in Firebase Authentication."
-            )
+            raise HTTPException(status_code=404, detail="Email not found in Firebase Authentication.")
         except Exception as e:
-            raise HTTPException(
-                status_code=400, detail=f"Failed to send password reset email: {str(e)}"
-            )
+            raise HTTPException(status_code=400, detail=f"Failed to send password reset email: {str(e)}")
 
     def change_password(self, uid: str, new_password: str):
         try:
             firebase_auth.update_user(uid, password=new_password)
             return {"message": "Password updated successfully."}
         except Exception as e:
-            raise HTTPException(
-                status_code=400, detail=f"Failed to change password: {str(e)}"
-            )
+            raise HTTPException(status_code=400, detail=f"Failed to change password: {str(e)}")
+
+    def delete_firebase_user(self, uid: str, email: str):
+        try:
+            auth.delete_user(uid)
+            return {
+                "message": f"User with email '{email}' deleted successfully from Firebase.",
+                "status": status.HTTP_200_OK,
+            }
+        except auth.UserNotFoundError:
+            raise HTTPException(status_code=404, detail="User not found in Firebase.")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to delete user: {str(e)}")
