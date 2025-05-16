@@ -110,6 +110,3 @@ async def download_file(filename: str):
     return StreamingResponse(open(file_path, "rb"), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={filename}"})
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
