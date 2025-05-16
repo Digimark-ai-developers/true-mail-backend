@@ -24,6 +24,7 @@ from app.schemas.email import (
     TestEmailResponseWrapper,
     TestEmailWrapper,
     dowloadFileWrapper,
+    AllTestEmaislOrderedByCreationTime,
 )
 from app.schemas.email import (  # Import your Pydantic models
     BulkEmailStatsCreateWithEmails,
@@ -55,7 +56,9 @@ def get_single_test_email(test_email_id: int, db: Session = Depends(get_db), use
     test_email = service.get_test_email(test_email_id, user.user_Id)
 
     return TestEmailResponseWrapper(
-        message="Test email found successfully.", status=status.HTTP_302_FOUND, data=TestEmailResponse.model_validate(test_email)
+        message="Test email found successfully.",
+        status=status.HTTP_302_FOUND,
+        data=TestEmailResponse.model_validate(test_email),
     )
 
 
@@ -66,7 +69,11 @@ def get_all_single_tested_emails_by_user_id(db: Session = Depends(get_db), user:
     """
     service = EmailService(db)
     test_emails = service.get_all_test_emails(user.user_Id)
-    return {"message": "All test emails read successfully.", "status": status.HTTP_200_OK, "data": jsonable_encoder(test_emails)}
+    return {
+        "message": "All test emails read successfully.",
+        "status": status.HTTP_200_OK,
+        "data": jsonable_encoder(test_emails),
+    }
 
 
 # Bulk Email Endpoints
@@ -220,4 +227,16 @@ def get_emails_for_csv(
         "message": "Emails fetched successfully.",
         "status": status.HTTP_200_OK,
         "data": [TestEmailResponse.model_validate(jsonable_encoder(email)) for email in emails],
+    }
+
+
+@router.get("/emails_ordered_by_creation_time", response_model=AllTestEmaislOrderedByCreationTime)
+async def get_all_tested_emails_ordered_by_creation_time(db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
+    """Get all tested emails ordered by creation time"""
+    service = EmailService(db)
+    test_emails = service.get_emails_by_creation_time(user.user_Id)
+    return {
+        "message": "Emails fetched successfully.",
+        "status": status.HTTP_200_OK,
+        "data": jsonable_encoder(test_emails),
     }

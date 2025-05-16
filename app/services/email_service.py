@@ -9,7 +9,12 @@ from sqlalchemy.exc import IntegrityError
 from app.models.credits import Credit, CreditUsage
 from app.models.email import BulkEmailStats, TestEmail
 from app.models.user import User
-from app.schemas.email import BulkEmailStatsCreateWithEmails, BulkEmailStatsResponseWithEmails, CreditUsageBase, TestEmailBase
+from app.schemas.email import (
+    BulkEmailStatsCreateWithEmails,
+    BulkEmailStatsResponseWithEmails,
+    CreditUsageBase,
+    TestEmailBase,
+)
 
 
 class EmailService:
@@ -64,7 +69,9 @@ class EmailService:
         test_email = (
             self.db.query(TestEmail)
             .filter(
-                TestEmail.id == test_email_id, TestEmail.user_id == user_id, or_(TestEmail.soft_delete.is_(False), TestEmail.soft_delete.is_(None))
+                TestEmail.id == test_email_id,
+                TestEmail.user_id == user_id,
+                or_(TestEmail.soft_delete.is_(False), TestEmail.soft_delete.is_(None)),
             )
             .first()
         )
@@ -206,7 +213,10 @@ class EmailService:
         # Get all bulk files belonging to the user (excluding soft deleted ones)
         bulk_files = (
             self.db.query(BulkEmailStats)
-            .filter(BulkEmailStats.user_id == user_id, or_(BulkEmailStats.soft_delete.is_(False), BulkEmailStats.soft_delete.is_(None)))
+            .filter(
+                BulkEmailStats.user_id == user_id,
+                or_(BulkEmailStats.soft_delete.is_(False), BulkEmailStats.soft_delete.is_(None)),
+            )
             .all()
         )
 
@@ -311,7 +321,6 @@ class EmailService:
                 is_valid=False,
                 is_disposable=False,
                 is_deliverable=False,
-                is_risky=False,
                 has_tag=False,
                 alphabetical_characters=0,
                 is_mailbox_full=False,
@@ -435,4 +444,8 @@ class EmailService:
         elif include_risky is True:
             query = query.filter(TestEmail.is_risky.is_(True))
 
+        return query.all()
+
+    def get_emails_by_creation_time(self, user_id: str):
+        query = self.db.query(TestEmail).filter(TestEmail.user_id == user_id, TestEmail.soft_delete.is_(False)).order_by(TestEmail.created_at.desc())
         return query.all()

@@ -81,6 +81,7 @@ class TestEmailResponse(BaseModel):
     mx_record: Optional[str] = None
     implicit_mx_record: Optional[str] = None
     score: int
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)  # Pydantic v2 replacement for orm_mode=True
 
@@ -98,6 +99,12 @@ class dowloadFileWrapper(BaseModel):
 
 
 class AllTestEmaislByUserId(BaseModel):
+    message: str
+    status: int
+    data: List[TestEmailResponse]
+
+
+class AllTestEmaislOrderedByCreationTime(BaseModel):
     message: str
     status: int
     data: List[TestEmailResponse]

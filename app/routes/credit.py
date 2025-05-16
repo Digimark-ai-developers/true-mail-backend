@@ -21,9 +21,7 @@ router = APIRouter(prefix="/credits", tags=["Credits"])
 def get_credit_balance(user: UserID = Depends(get_current_user), db: Session = Depends(get_db)):
     service = CreditService(db)
     credit_data = service.fetch_credit_balance(user.user_Id)
-    return CreditBalanceResponseWrapper(
-        message="Credit balance read successfully", status=status.HTTP_200_OK, data=credit_data
-    )
+    return CreditBalanceResponseWrapper(message="Credit balance read successfully", status=status.HTTP_200_OK, data=credit_data)
 
 
 @router.get("/usage", summary="Get all credit usage for user", response_model=CreditUsageResponseWrapper)
@@ -31,15 +29,11 @@ def get_credit_usage(user: UserID = Depends(get_current_user), db: Session = Dep
     service = CreditService(db)
     usage_data = service.fetch_credit_usage(user.user_Id)
     usage_data_dict = [CreditUsageResponse.model_validate(item) for item in usage_data]
-    return CreditUsageResponseWrapper(
-        message="Credit usage found successfully", status=status.HTTP_200_OK, data=usage_data_dict
-    )
+    return CreditUsageResponseWrapper(message="Credit usage found successfully", status=status.HTTP_200_OK, data=usage_data_dict)
 
 
 @router.get("/history", summary="Get credit purchase history", response_model=CreditHistoryResponseWrapper)
 def get_credit_history(user: UserID = Depends(get_current_user), db: Session = Depends(get_db)):
     service = CreditService(db)
     history_data = service.fetch_credit_history(user.user_Id)
-    return CreditHistoryResponseWrapper(
-        message="Credit purchase history found successfully", status=status.HTTP_200_OK, data=history_data
-    )
+    return CreditHistoryResponseWrapper(message="Credit purchase history found successfully", status=status.HTTP_200_OK, data=history_data)
