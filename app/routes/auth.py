@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, status
 from sqlalchemy.orm import Session
 
 from app.database.db_config import get_db
@@ -7,9 +7,6 @@ from app.database.db_config import get_db
 from app.schemas.auth import UserID, UserInfo, UserRegisterRequest
 from app.services.auth_service import AuthService
 from app.utils.jwt_handler import create_jwt_token, get_current_user
-from fastapi import Body
-from app.schemas.auth import ChangePasswordRequest
-
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -45,11 +42,7 @@ def login_user(
 
     token = create_jwt_token({"user_Id": user.user_id})
 
-    return {
-        "message": "Login successful",
-        "status_code": status.HTTP_200_OK,
-        "access_token": token,
-    }
+    return {"access_token": token, "token_type": "bearer"}
 
 
 @router.post("/forgot-password")

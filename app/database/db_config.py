@@ -10,6 +10,10 @@ load_dotenv()
 
 # PostgreSQL database URI (example: "postgresql://username:password@localhost/db_name")
 DATABASE_URL = os.getenv("DATABASE_URL")
+<<<<<<< HEAD
+=======
+
+>>>>>>> 12fcb66de21985b32d3e62100ab67f4ad27d6191
 
 # Create database engine
 engine = create_engine(DATABASE_URL)
