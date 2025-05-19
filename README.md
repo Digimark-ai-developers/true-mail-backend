@@ -45,25 +45,31 @@ true-mail-backend/
 │   ├── middlewares/
 │   │   └── auth_middleware.py        # Authentication middleware (fixed spelling)
 │   ├── models/
-│   │   ├── emails.py            # Bulk email-related DB models
+│   │   ├── credits.py                # Credit related DB models
+│   │   ├── emails.py                 # Bulk email-related DB models
 │   │   ├── subscriptions_stripe.py   # Stripe subscription models
 │   │   └── user.py                   # User models
 │   ├── routes/
 │   │   ├── email.py                  # e-mail api for check bulk and single
 │   │   ├── credit.py                 # credit use , purchase, and history call
-│   │   ├── subscription_stripe.py
+│   │   ├── subscription_stripe.py    # payment related routes
 │   │   ├── auth.py                   # Auth routes (login, signup, etc.)
 │   │   └── user.py                   # User management routes
 │   ├── schemas/
+│   │   ├── credits.py                # Credit schema
+│   │   ├── subcription_stripe.py     # Payment related schema
 │   │   ├── email.py                  # email schema
 │   │   ├── auth.py                   # Auth-related Pydantic schemas
 │   │   ├── otp.py                    # OTP-related schemas
 │   │   └── user.py                   # User schemas
 │   ├── services/
+│   │   ├── credit_service.py         # Credit related services
+│   │   ├── email_service.py          # E-mail related services
 │   │   ├── auth_services.py          # Authentication services
 │   │   ├── subscription_stripe.py    # subscription for stripe
 │   │   └── user_services.py          # User services (profile update, etc.)
 │   ├── utils/
+│   │   ├── email_service.py          # Email utility functions
 │   │   ├── email_validator.py        # Email validation utility
 │   │   ├── firebase.py               # for firebase auth
 │   │   ├── jwt_handler.py
