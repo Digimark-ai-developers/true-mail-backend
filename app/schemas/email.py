@@ -183,7 +183,7 @@ class BulkEmailStatsCreateWithEmails(BaseModel):
     test_emails: List[str] = Field(..., description="List of email addresses to be tested")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "user_id": "user_123",
                 "file_name": "marketing_emails_may.csv",
