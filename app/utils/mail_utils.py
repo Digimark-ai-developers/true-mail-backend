@@ -13,18 +13,6 @@ from datetime import timezone
 from email.utils import parseaddr
 from  typing import Optional, Any
 
-
-
-DEFAULT_TIMEOUT = 15
-
-def caching_resolver(*, timeout: Optional[int] = None, cache: Any = None, dns_resolver: Optional[dns.resolver.Resolver] = None) -> dns.resolver.Resolver:
-    if timeout is None:
-      timeout = DEFAULT_TIMEOUT
-    resolver = dns_resolver or dns.resolver.Resolver()
-    resolver.cache = cache or dns.resolver.LRUCache()
-    resolver.lifetime = timeout  # timeout, in seconds
-    return resolver
-
 def load_disposable_domains(file_path='disposed_email.conf'):
     try:
         if os.path.exists(file_path):
