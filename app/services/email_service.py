@@ -73,6 +73,15 @@ class EmailService:
 
         return test_email
 
+    def get_emails_by_creation_time(self, user_id: str):
+        query = (
+            self.db.query(TestEmail)
+            .filter(TestEmail.user_id == user_id, TestEmail.soft_delete.is_(False))
+            .order_by(TestEmail.created_at.desc())
+            .limit(5)
+        )
+        return query.all()
+
     def get_all_test_emails(self, user_id: str) -> List[TestEmail]:
         return (
             self.db.query(TestEmail)
@@ -133,7 +142,7 @@ class EmailService:
             file_name=file.filename,
             duplicate_email=duplicate_count,
             total_valid_emails=total_valid,
-            status = "Completed",
+            status="Completed",
             deliverable=deliverable_percent,
             total=total_emails,
             created_at=datetime.now(timezone.utc),
@@ -255,7 +264,6 @@ class EmailService:
             "risky_percentage": round((risky_count / total_emails) * 100, 2),
             "uploaded_at": bulk_email.created_at,
         }
-
 
     def create_bulk_email_with_copy_paste(self, payload: BulkEmailStatsCreateWithEmails, user_id: str):
         email_count = len(payload.test_emails)
@@ -442,16 +450,13 @@ class EmailService:
             query = query.filter(TestEmail.is_risky.is_(True))
 
         return query.all()
+
     def get_all_files_with_delieved_emails_and_status(self, user_id: str):
         files = self.db.query(BulkEmailStats).filter(BulkEmailStats.user_id == user_id).all()
         result = []
 
         for file in files:
-            total_emails = (
-                self.db.query(TestEmail)
-                .filter(TestEmail.file_id == file.id, TestEmail.user_id == user_id)
-                .count()
-            )
+            total_emails = self.db.query(TestEmail).filter(TestEmail.file_id == file.id, TestEmail.user_id == user_id).count()
 
             deliverable_count = (
                 self.db.query(TestEmail)
@@ -459,11 +464,14 @@ class EmailService:
                 .count()
             )
 
-            result.append({
-                "file_name": file.file_name,
-                "total_emails": total_emails,
-                "deliverable": deliverable_count,
-                "status": file.status,
-            })
+            result.append(
+                {
+                    "id": file.id,
+                    "file_name": file.file_name,
+                    "deliverable": deliverable_count,
+                    "total_emails": total_emails,
+                    "status": file.status,
+                }
+            )
 
         return result

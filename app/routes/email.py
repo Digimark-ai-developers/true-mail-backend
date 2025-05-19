@@ -18,6 +18,7 @@ from app.schemas.auth import UserID
 from app.schemas.email import (
     AllTestEmailsByFileResponseWrapper,
     AllTestEmaislByUserId,
+    AllTestEmaislOrderedByCreationTime,
     FileStatsResponse,
     FileStatsResponseWrapper,
     TestEmailBase,
@@ -58,6 +59,18 @@ def get_single_test_email(test_email_id: int, db: Session = Depends(get_db), use
     return TestEmailResponseWrapper(
         message="Test email found successfully.", status=status.HTTP_302_FOUND, data=TestEmailResponse.model_validate(test_email)
     )
+
+
+@router.get("/recent_tested_emails", response_model=AllTestEmaislOrderedByCreationTime)
+async def get_all_recent_tested_emails(db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
+    """Get all tested emails ordered by creation time"""
+    service = EmailService(db)
+    test_emails = service.get_emails_by_creation_time(user.user_Id)
+    return {
+        "message": "Emails fetched successfully.",
+        "status": status.HTTP_200_OK,
+        "data": jsonable_encoder(test_emails),
+    }
 
 
 @router.get("/all_single_tested_emails", response_model=AllTestEmaislByUserId)
@@ -224,12 +237,8 @@ def get_emails_for_csv(
     }
 
 
-@router.get("all_files_with_delieved_emails_and_status", response_model=FileStatsResponse)
+@router.get("/all_files_with_delieved_emails_and_status", response_model=FileStatsResponse)
 def get_user_files(user: UserInfo = Depends(get_current_user), db: Session = Depends(get_db)):
     service = EmailService(db)
     files_data = service.get_all_files_with_delieved_emails_and_status(user.user_Id)
-    return {
-        "message": "Files fetched successfully.",
-        "status": status.HTTP_200_OK,
-        "data": files_data
-    }
+    return {"message": "Files fetched successfully.", "status": status.HTTP_200_OK, "data": files_data}

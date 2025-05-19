@@ -132,6 +132,7 @@ class FileStatsResponse(BaseModel):
     risky_percentage: float
     uploaded_at: datetime
 
+
 class FileStatsResponseWrapper(BaseModel):
     message: str
     status: int
@@ -179,7 +180,7 @@ class BulkEmailStatsCreateWithEmails(BaseModel):
     test_emails: List[str] = Field(..., description="List of email addresses to be tested")
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "user_id": "user_123",
                 "file_name": "marketing_emails_may.csv",
@@ -199,7 +200,6 @@ class BulkEmailStatsResponseWithEmails(BaseModel):
     test_emails: list[str]
 
 
-
 class FileStats(BaseModel):
     id: int
     file_name: str
@@ -212,3 +212,9 @@ class FileStatsResponse(BaseModel):
     message: str
     status: int
     data: List[FileStats]
+
+
+class AllTestEmaislOrderedByCreationTime(BaseModel):
+    message: str
+    status: int
+    data: List[TestEmailResponse]
