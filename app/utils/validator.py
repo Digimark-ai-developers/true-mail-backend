@@ -102,7 +102,6 @@ async def batch_progress():
     return {"progress": progress}
 
 
-# get_download_file___
 @app.get("/download/{filename}")
 async def download_file(filename: str):
     file_path = os.path.join(UPLOAD_FOLDER, filename)
