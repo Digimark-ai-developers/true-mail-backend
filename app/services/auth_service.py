@@ -28,7 +28,7 @@ class AuthService:
                 email=user_data.email,
                 password=user_data.password,
                 display_name=f"{user_data.first_name} {user_data.last_name}",
-                photo_url=user_data.photoURL,
+                # photo_url=user_data.photoURL,
             )
 
             # Generate email verification link and send email
