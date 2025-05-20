@@ -4,12 +4,17 @@ from fastapi import HTTPException, status
 from firebase_admin import auth as firebase_auth
 from firebase_admin._auth_utils import UserNotFoundError  # Import this
 from sqlalchemy.orm import Session
+import requests
 from app.models.credits import Credit
 from app.models.user import User
 from app.schemas.auth import UserRegisterRequest
 from app.utils.email_service import send_email_with_link
 from app.utils.firebase import verify_firebase_token
 from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
+import os
+load_dotenv()
+
 
 
 class AuthService:
@@ -80,28 +85,25 @@ class AuthService:
             print(e)
             raise e  # just re-raise the exception
 
-    def login_user(self, id_token: str) -> User:
-        try:
-            user_info = verify_firebase_token(id_token)
-            uid = user_info["uid"]
+    def login_with_email_password(self, email: str, password: str) -> User:
+        api_key = os.getenv("FIREBASE_API_KEY")
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={api_key}"
 
-            # Fetch Firebase user details
-            firebase_user = firebase_auth.get_user(uid)
-            if not firebase_user.email_verified:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Email not verified. Please verify your email first.",
-                )
+        payload = {
+            "email": email,
+            "password": password,
+            "returnSecureToken": True,
+        }
 
-            # Fetch user from local DB
-            user = self.db.query(User).filter(User.user_id == uid).first()
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found. Please register first.")
+        response = requests.post(url, json=payload)
+        if response.status_code != 200:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
 
-            return user
+        data = response.json()
+        uid = data["localId"]
+        id_token = data["idToken"]
 
-        except Exception as e:
-            raise HTTPException(status_code=401, detail=f"Login failed: {str(e)}")
+        return id_token
 
     def send_password_reset_email(self, email: str):
         try:

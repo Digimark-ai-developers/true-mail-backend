@@ -36,20 +36,19 @@ def register_user(user_data: UserRegisterRequest, db: Session = Depends(get_db))
 
 
 @router.post("/login")
-def login_user(
-    id_token: str = Body(..., embed=True),  # expects {"id_token": "..."}
-    db=Depends(get_db),
-):
+def login_user(email: str = Body(...), password: str = Body(...), db: Session = Depends(get_db)):
     auth_service = AuthService(db)
-    user = auth_service.login_user(id_token)
+    
+    firebase_id_token = auth_service.login_with_email_password(email, password)  # ✅ unpack here
 
-    token = create_jwt_token({"user_Id": user.user_id})
+    # token = create_jwt_token({"user_Id": user.user_id})  # ✅ user is now the correct object
 
     return {
         "message": "Login successful",
         "status_code": status.HTTP_200_OK,
-        "access_token": token,
+        "firebase_id_token": firebase_id_token,  # optional: include if you need it
     }
+
 
 
 @router.post("/forgot-password")

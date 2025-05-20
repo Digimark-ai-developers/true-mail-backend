@@ -61,26 +61,26 @@ class TestEmailResponse(BaseModel):
     user_tested_email: Optional[str] = None
     full_name: Optional[str] = None
     gender: Optional[str] = None
-    status: Optional[str] = None
+    status: Optional[str] = None  #available
     reason: Optional[str] = None
-    domain: str
-    is_free: bool
-    is_risky: Optional[bool] = None
-    is_valid: bool
-    is_disposable: bool
-    is_deliverable: bool
+    domain: str  #available
+    is_free: bool  #available
+    is_risky: Optional[bool] = None  #available
+    is_valid: bool  #available
+    is_disposable: bool  #available
+    is_deliverable: bool  #available
     has_tag: bool
-    alphabetical_characters: int
+    alphabetical_characters: int  #available
     is_mailbox_full: bool
     has_role: bool
     is_accept_all: bool
-    has_numerical_characters: int
-    has_unicode_symbols: int
+    has_numerical_characters: int  #available
+    has_unicode_symbols: int  #available
     has_no_reply: bool
-    smtp_provider: Optional[str] = None
+    smtp_provider: Optional[str] = None  #available
     mx_record: Optional[str] = None
-    implicit_mx_record: Optional[str] = None
-    score: int
+    implicit_mx_record: Optional[str] = None  #available
+    score: int  #available
 
     model_config = ConfigDict(from_attributes=True)  # Pydantic v2 replacement for orm_mode=True
 
