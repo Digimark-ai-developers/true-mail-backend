@@ -1,19 +1,18 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 
-
 class UserRegisterRequest(BaseModel):
     email: EmailStr
     password: str
-    first_name: str
-    last_name: str
-    address: str
-    city: str
-    gender: str
-    photoURL: str
-    country: str
-    state: str
-    zip_code: int
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    address: Optional[str] = None
+    city: Optional[str] = None
+    gender: Optional[str] = None
+    photoURL: Optional[str] = None
+    country: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
 
 
 class UserRegisterResponse(BaseModel):
@@ -45,7 +44,7 @@ class UserInfo(BaseModel):
     user_Id: str
     email: EmailStr
     first_name: str
-    last_name: str
+    last_name: str 
     photoURL: Optional[str]
 
     class Config:
