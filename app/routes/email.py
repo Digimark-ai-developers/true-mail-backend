@@ -37,17 +37,33 @@ from app.services.email_service import EmailService
 router = APIRouter(prefix="/email", tags=["Email Validation Functions"])
 
 
+# @router.post("/test_single_email", response_model=TestEmailWrapper)
+# def create_single_email(test_email: TestEmailBase, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
+#     service = EmailService(db)
+#     email = service.create_test_email(user.user_Id, test_email) # type: ignore
+
+#     return TestEmailWrapper(
+#         message="Email tested successfully.",
+#         status=status.HTTP_201_CREATED,
+#         data=TestEmailBase.model_validate(email),  # validate from SQLAlchemy object
+#     )
+
 @router.post("/test_single_email", response_model=TestEmailWrapper)
-def create_single_email(test_email: TestEmailBase, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
+async def create_single_email(
+    test_email: TestEmailBase,
+    db: Session = Depends(get_db),
+    user: UserID = Depends(get_current_user)
+):
     service = EmailService(db)
-    email = service.create_test_email(user.user_Id, test_email)
+    email = await service.create_test_email(user.user_Id, test_email)
 
     return TestEmailWrapper(
         message="Email tested successfully.",
         status=status.HTTP_201_CREATED,
-        data=TestEmailBase.model_validate(email),  # validate from SQLAlchemy object
+        data=TestEmailBase.model_validate(email),
     )
 
+    
 
 @router.get("/test_single_email/{test_email_id}", response_model=TestEmailResponseWrapper)
 def get_single_test_email(test_email_id: int, db: Session = Depends(get_db)):
@@ -65,7 +81,7 @@ def get_all_single_tested_emails_by_user_id(db: Session = Depends(get_db), user:
     Get all test emails for the current user.
     """
     service = EmailService(db)
-    test_emails = service.get_all_test_emails(user.user_Id)
+    test_emails = service.get_all_test_emails(user.user_Id) # type: ignore
     return {"message": "All test emails read successfully.", "status": status.HTTP_200_OK, "data": jsonable_encoder(test_emails)}
 
 
@@ -81,7 +97,7 @@ def upload_bulk_email_file(
     user: UserInfo = Depends(get_current_user),
 ):
     service = EmailService(db)
-    result = service.process_bulk_email_file(file, user.user_Id)
+    result = service.process_bulk_email_file(file, user.user_Id) # type: ignore
 
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
@@ -100,7 +116,7 @@ def create_bulk_email_by_copy_paste(
     user: UserInfo = Depends(get_current_user),
 ):
     service = EmailService(db)
-    result = service.create_bulk_email_with_copy_paste(payload, user.user_Id)
+    result = service.create_bulk_email_with_copy_paste(payload, user.user_Id) # type: ignore
 
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
@@ -119,7 +135,7 @@ def get_all_bulk_emails_grouped_by_files(
 ):
 
     service = EmailService(db)
-    grouped_emails = service.get_all_emails_grouped_by_files(user.user_Id)
+    grouped_emails = service.get_all_emails_grouped_by_files(user.user_Id)  # type: ignore
 
     return {
         "message": "Emails fetched successfully",
@@ -142,7 +158,7 @@ def get_file_stats_by_file_id(
     user: UserID = Depends(get_current_user),
 ):
     service = EmailService(db)
-    stats = service.get_file_stats(file_id, user.user_Id)
+    stats = service.get_file_stats(file_id, user.user_Id) # type: ignore
 
     if not stats:
         raise HTTPException(status_code=404, detail="File not found or no emails present")
@@ -162,7 +178,7 @@ async def update_filename(
     user: UserInfo = Depends(get_current_user),
 ):
     service = EmailService(db)
-    updated_filename = service.update_file_name_by_id(file_id, new_filename, user.user_Id)
+    updated_filename = service.update_file_name_by_id(file_id, new_filename, user.user_Id) # type: ignore 
 
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
@@ -182,7 +198,7 @@ async def delete_single_tested_email(
 ):
     """Soft deletes test email by ID"""
     service = EmailService(db)
-    deleted_email = service.soft_delete_test_email_by_id(test_email_id, user.user_Id)
+    deleted_email = service.soft_delete_test_email_by_id(test_email_id, user.user_Id) # type: ignore
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,
@@ -202,7 +218,7 @@ async def delete_bulk_emails_file(
 ):
     """Soft delete bulk email stats by ID"""
     service = EmailService(db)
-    deleted_file = service.soft_delete_bulk_emails_file_by_id(file_id, user.user_Id)
+    deleted_file = service.soft_delete_bulk_emails_file_by_id(file_id, user.user_Id) # type: ignore
 
     return {
         "message": "Bulk emails file have been deleted successfully.",
@@ -219,7 +235,7 @@ def get_emails_for_csv(
     user: UserID = Depends(get_current_user),
 ):
     service = EmailService(db)
-    emails = service.get_emails_for_csv(file_id, user.user_Id, include_risky)
+    emails = service.get_emails_for_csv(file_id, user.user_Id, include_risky) # type: ignore
     return {
         "message": "Emails fetched successfully.",
         "status": status.HTTP_200_OK,

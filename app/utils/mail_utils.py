@@ -1,4 +1,4 @@
-#utils.py 
+#mail_utils.py
 # this file is handle all main functions of e-mail validator tool
 import re
 import smtplib
@@ -63,12 +63,91 @@ def verify_smtp_server(mx_record, domain):
             return True
     except:
         return False
+    
+
+import socket
+import ssl
+import re
+
+def get_smtp_provider(mx_record, domain):
+    provider_map = {
+        "gmail.com": 1, "googlemail.com": 1,
+        "yahoo.com": 2, "ymail.com": 2,
+        "outlook.com": 3, "hotmail.com": 3, "live.com": 3,
+        "aol.com": 4,
+        "icloud.com": 5, "me.com": 5,
+        "protonmail.com": 6,
+        "zoho.com": 7,
+        "gmx.com": 8,
+        "yandex.com": 9,
+    }
+
+    ports = [25, 587, 465]
+    
+    for port in ports:
+        try:
+            if port == 465:
+                context = ssl.create_default_context()
+                with socket.create_connection((mx_record, port), timeout=5) as sock:
+                    with context.wrap_socket(sock, server_hostname=mx_record) as ssock:
+                        banner = ssock.recv(1024).decode(errors='ignore')
+                        ehlo = send_ehlo(ssock)
+            else:
+                with socket.create_connection((mx_record, port), timeout=5) as sock:
+                    banner = sock.recv(1024).decode(errors='ignore')
+                    ehlo = send_ehlo(sock)
+
+            # Try matching banner or EHLO response
+            response = f"{banner} {ehlo}".lower()
+
+            for provider_domain, provider_id in provider_map.items():
+                if re.search(provider_domain, response, re.IGNORECASE):
+                    return provider_id
+
+            # If no match found but connection succeeded
+            return -1  # unknown but valid server
+
+        except Exception as e:
+            continue
+
+    # Fallback to domain name check
+    for provider_domain, provider_id in provider_map.items():
+        if domain.lower().endswith(provider_domain):
+            return provider_id
+
+    return 0  # invalid or unknown
 
 
+def send_ehlo(sock):
+    try:
+        sock.sendall(b"EHLO example.com\r\n")
+        res = sock.recv(2048).decode(errors='ignore')
+        return res
+    except:
+        return ""
+    
+    
 
-def check_email_reachability(email, sender_email, disposable_domains):
+
+def check_email_reachability(email, sender_email, disposable_domains): 
+    
+    # check how many characeters in email   
+    def analyze_string(email):
+        alphabetic = sum(1 for c in email if c.isalpha())
+        numeric = sum(1 for c in email if c.isdigit())
+        symbols = len(email) - alphabetic - numeric
+        return {
+            'alphabetic': alphabetic,
+            'numeric': numeric,
+            'symbols': symbols
+            }
+    result = analyze_string(email)
+    print(result)
+    
+    
     if not validate_email_syntax(email):
         return False, "Invalid email syntax"
+ 
 
     address = parseaddr(email)[1]
     try:
@@ -83,20 +162,20 @@ def check_email_reachability(email, sender_email, disposable_domains):
     dm_info = {}
     try:
         whois_data = whois.whois(domain)
-        dm_info['expiration_date'] = getattr(whois_data, 'expiration_date', None)
+       # dm_info['expiration_date'] = getattr(whois_data, 'expiration_date', None)
         dm_info['registrar'] = getattr(whois_data, 'registrar', 'N/A')
-        dm_info['creation_date'] = getattr(whois_data, 'creation_date', None)
-        dm_info['updated_date'] = getattr(whois_data, 'updated_date', None)
+       # dm_info['creation_date'] = getattr(whois_data, 'creation_date', None)
+        #dm_info['updated_date'] = getattr(whois_data, 'updated_date', None)
         dm_info['country'] = getattr(whois_data, 'country', 'N/A')
         dm_info['whois_server'] = getattr(whois_data,'whois_server','N/A')
         
 
-        expiration_date = dm_info['expiration_date']
-        if isinstance(expiration_date, list):
-            expiration_date = expiration_date[0]
+        # expiration_date = dm_info['expiration_date']
+        # if isinstance(expiration_date, list):
+        #     expiration_date = expiration_date[0]
 
-        if expiration_date and expiration_date < datetime.datetime.now(timezone.utc if hasattr(expiration_date, 'tzinfo') and expiration_date.tzinfo else None):
-            return False, f"Domain '{domain}' is expired."
+        # if expiration_date and expiration_date < datetime.datetime.now(timezone.utc if hasattr(expiration_date, 'tzinfo') and expiration_date.tzinfo else None):
+        #     return False, f"Domain '{domain}' is expired."
     except Exception as e:
         dm_info = {
             'error': f"WHOIS lookup failed: {str(e)}"
@@ -120,7 +199,7 @@ def check_email_reachability(email, sender_email, disposable_domains):
         message_str = message.decode('utf-8', 'ignore') if hasattr(message, 'decode') else str(message)
 
         if code == 250:
-            return True, "VALID", dm_info
+            return True, "VALID", dm_info, check_count
         return False, f"Invalid: SMTP Error {code} - {message_str}", dm_info
     except Exception as e:
         return False, f"SMTP verification failed: {str(e)}", dm_info
@@ -129,7 +208,5 @@ def check_email_reachability(email, sender_email, disposable_domains):
             server.quit()
         except:
             pass
-        
-        
         
         

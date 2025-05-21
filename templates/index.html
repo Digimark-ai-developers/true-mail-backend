@@ -20,7 +20,7 @@
             <p><strong>Email:</strong> {{ result.email }}</p>
             <p><strong>Status:</strong> <span class="badge bg-{{ 'success' if result.status == 'Valid' else 'danger' }}">{{ result.status }}</span></p>
             <p><strong>Message:</strong> {{ result.message }}</p>
-            <p><strong>Creation Date:</strong> {{ result.dm_info.get('creation_date', 'N/A') }}</p>
+           <!--<p><strong>Creation Date:</strong> {{ result.dm_info.get('creation_date', 'N/A') }}</p> -->
             <p><strong>Last Updated:</strong> {{ result.dm_info.get('updated_date', 'N/A') }}</p>
             <p><strong>Country:</strong> {{ result.dm_info.get('country', 'N/A') }}</p>
             <p><strong>Server:</strong> {{ result.dm_info.get('whois_server', 'N/A') }}</p>

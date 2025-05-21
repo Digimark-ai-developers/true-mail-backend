@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import re
 import os
 from typing import List
 from fastapi import HTTPException, UploadFile, status
@@ -10,35 +11,125 @@ from app.models.credits import Credit, CreditUsage
 from app.models.email import BulkEmailStats, TestEmail
 from app.models.user import User
 from app.schemas.email import BulkEmailStatsCreateWithEmails, BulkEmailStatsResponseWithEmails, CreditUsageBase, TestEmailBase
+from app.utils.mail_utils import (
+    load_disposable_domains,
+    validate_email_syntax,
+    get_mx_record,
+    verify_smtp_server,
+    check_email_reachability,
+    get_smtp_provider
+)
+
+from sqlalchemy.exc import IntegrityError
+from datetime import datetime, timezone
+from fastapi import HTTPException, status
+from app.models.email import TestEmail
+from app.models.user import User
+from app.models.credits import Credit, CreditUsage
+from app.schemas.email import TestEmailBase
 
 
+import logging
+
+logger = logging.getLogger(__name__)
 class EmailService:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_test_email(self, user_id: str, test_email: TestEmailBase):
-        # Validate user
+    async def create_test_email(
+        self,
+        user_id: str,
+        test_email: TestEmailBase,
+        sender_email: str = "test@example.com"
+    ):
+        # Step 1: Validate User
         user = self.db.query(User).filter(User.user_id == user_id).first()
         if not user:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User ID not found")
+            raise HTTPException(status_code=400, detail="User ID not found")
 
-        # Validate and deduct credit
+        # Step 2: Check and Deduct Credits
         credit = self.db.query(Credit).filter(Credit.user_id == user_id).first()
         if not credit or credit.remaining_credits < 1:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient credits to test email")
+            raise HTTPException(status_code=403, detail="Insufficient credits to test email")
 
         credit.remaining_credits -= 1
         credit.total_credits -= 1
         credit.last_updated = datetime.utcnow()
         self.db.add(credit)
+        
 
-        # Create TestEmail entry
-        db_test_email = TestEmail(**test_email.model_dump(), user_id=user_id, created_at=datetime.now(timezone.utc), soft_delete=False)
+
+        # Step 3: Email Validations
+        target_email = test_email.user_tested_email
+        if not target_email:
+            raise HTTPException(status_code=400, detail="No email provided to validate.")
+        
+                # get smtp provider 
+        try:
+            _, domain = target_email.split('@')
+        except ValueError:
+            domain = ""
+        
+        
+
+        disposable_domains = load_disposable_domains()
+        is_syntax_valid = validate_email_syntax(target_email)
+        
+        email_domain = target_email.split('@')[-1].lower()
+        is_disposable = int(email_domain in disposable_domains)
+
+        
+        # Step 4: Safely Handle MX Record
+        mx_record_result = get_mx_record(target_email)
+        mx_record = mx_record_result[0] if mx_record_result else None
+        implicit_mx = mx_record_result[1] if mx_record_result and len(mx_record_result) > 1 else None
+
+        smtp_status = verify_smtp_server(target_email, sender_email)
+        
+        is_reachable = check_email_reachability(target_email, sender_email, disposable_domains)
+        
+        smtp_provider = get_smtp_provider(domain)
+        
+        domain_part = target_email.split('@')[-1].split('.')[0] # extract the domain name
+        
+        email_chars = target_email.split('@')[0] # only analyze the local-part (before @)
+       
+        email_str = target_email or ""
+        alphabetical_count = sum(c.isalpha() for c in email_str)
+        numerical_count = sum(c.isdigit() for c in email_str)
+        unicode_symbol_count = len(email_str) - alphabetical_count - numerical_count
+        
+
+        # Step 5: Prepare data dictionary with overrides
+        email_data = test_email.model_dump()
+        email_data.update({
+            "user_id": user_id,
+            "created_at": datetime.now(timezone.utc),
+            "soft_delete": False,
+            "full_name":email_chars,
+            "is_valid": is_syntax_valid,
+            "has_tag": 'No',
+            "has_role": 'Not defined ',
+            "smtp_provider": smtp_provider,
+            "mx_record": mx_record,
+            "implicit_mx_record": implicit_mx,
+            "is_deliverable": smtp_status,
+            "status": "Inactive_User" if is_syntax_valid and smtp_status else "Active_User",
+            "reason": "SMTP validated" if smtp_status else "SMTP Working",
+            "is_disposable": is_disposable,
+            "domain":domain_part,
+            "alphabetical_characters": alphabetical_count,
+            "has_numerical_characters": numerical_count,
+            "has_unicode_symbols": unicode_symbol_count,
+        })
+
+        # Step 6: Create DB record
+        db_test_email = TestEmail(**email_data)
         self.db.add(db_test_email)
         self.db.commit()
         self.db.refresh(db_test_email)
 
-        # Create credit usage record
+        # Step 7: Record credit usage
         credit_used = CreditUsageBase(
             user_id=user_id,
             email_or_file_id=db_test_email.id,
@@ -55,9 +146,10 @@ class EmailService:
             return db_test_email
         except IntegrityError:
             self.db.rollback()
+            logger.exception("Database error during create_test_email.")
             raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Database error occurred",
+                status_code=500,
+                detail="Database error occurred while testing email",
             )
 
     def get_test_email(self, test_email_id: int):
