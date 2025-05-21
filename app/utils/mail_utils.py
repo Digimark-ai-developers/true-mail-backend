@@ -189,7 +189,7 @@ def perform_email_checks(target_email: str, sender_email: str, disposable_domain
     elif smtp_provider in trusted_providers and smtp_accessible:
         is_valid = True
         is_deliverable = True
-        validation_reason = f"Trusted provider ({smtp_provider}) - SMTP response ignored"
+        validation_reason = f"Trusted provider ({smtp_provider}) - SMTP response"
         smtp_reason = "SMTP access confirmed, but verification skipped for trusted provider"
     else:
         is_valid = False
