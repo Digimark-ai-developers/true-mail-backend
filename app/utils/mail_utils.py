@@ -63,70 +63,22 @@ def verify_smtp_server(mx_record, domain):
             return True
     except:
         return False
-    
 
-import socket
-import ssl
-import re
-
-def get_smtp_provider(mx_record, domain):
+def get_smtp_provider(domain: str) -> str:
     provider_map = {
-        "gmail.com": 1, "googlemail.com": 1,
-        "yahoo.com": 2, "ymail.com": 2,
-        "outlook.com": 3, "hotmail.com": 3, "live.com": 3,
-        "aol.com": 4,
-        "icloud.com": 5, "me.com": 5,
-        "protonmail.com": 6,
-        "zoho.com": 7,
-        "gmx.com": 8,
-        "yandex.com": 9,
+        "gmail.com": "Google", "googlemail.com": "Google",
+        "yahoo.com": "Yahoo", "ymail.com": "Yahoo",
+        "outlook.com": "Microsoft", "hotmail.com": "Microsoft", "live.com": "Microsoft",
+        "aol.com": "AOL",
+        "icloud.com": "Apple", "me.com": "Apple",
+        "protonmail.com": "ProtonMail",
+        "zoho.com": "Zoho",
+        "gmx.com": "GMX",
+        "yandex.com": "Yandex",
     }
 
-    ports = [25, 587, 465]
-    
-    for port in ports:
-        try:
-            if port == 465:
-                context = ssl.create_default_context()
-                with socket.create_connection((mx_record, port), timeout=5) as sock:
-                    with context.wrap_socket(sock, server_hostname=mx_record) as ssock:
-                        banner = ssock.recv(1024).decode(errors='ignore')
-                        ehlo = send_ehlo(ssock)
-            else:
-                with socket.create_connection((mx_record, port), timeout=5) as sock:
-                    banner = sock.recv(1024).decode(errors='ignore')
-                    ehlo = send_ehlo(sock)
-
-            # Try matching banner or EHLO response
-            response = f"{banner} {ehlo}".lower()
-
-            for provider_domain, provider_id in provider_map.items():
-                if re.search(provider_domain, response, re.IGNORECASE):
-                    return provider_id
-
-            # If no match found but connection succeeded
-            return -1  # unknown but valid server
-
-        except Exception as e:
-            continue
-
-    # Fallback to domain name check
-    for provider_domain, provider_id in provider_map.items():
-        if domain.lower().endswith(provider_domain):
-            return provider_id
-
-    return 0  # invalid or unknown
-
-
-def send_ehlo(sock):
-    try:
-        sock.sendall(b"EHLO example.com\r\n")
-        res = sock.recv(2048).decode(errors='ignore')
-        return res
-    except:
-        return ""
-    
-    
+    domain = domain.lower()
+    return provider_map.get(domain, "Unknown")  # Returns provider name or "Unknown"
 
 
 def check_email_reachability(email, sender_email, disposable_domains): 
@@ -199,7 +151,7 @@ def check_email_reachability(email, sender_email, disposable_domains):
         message_str = message.decode('utf-8', 'ignore') if hasattr(message, 'decode') else str(message)
 
         if code == 250:
-            return True, "VALID", dm_info, check_count
+            return True, "VALID", dm_info
         return False, f"Invalid: SMTP Error {code} - {message_str}", dm_info
     except Exception as e:
         return False, f"SMTP verification failed: {str(e)}", dm_info
@@ -209,4 +161,28 @@ def check_email_reachability(email, sender_email, disposable_domains):
         except:
             pass
         
+        
+        
+        
+# New utility function to safely unpack email checks
+
+def perform_email_checks(target_email: str, sender_email: str, disposable_domains: list):
+    smtp_status_result = verify_smtp_server(target_email, sender_email)
+    if isinstance(smtp_status_result, tuple):
+        smtp_deliverable = smtp_status_result[0]
+        smtp_reason = smtp_status_result[1]
+    else:
+        smtp_deliverable = smtp_status_result
+        smtp_reason = "SMTP check completed."
+
+    reachability_result = check_email_reachability(target_email, sender_email, disposable_domains)
+    if isinstance(reachability_result, tuple):
+        is_valid = reachability_result[0]
+        validation_reason = reachability_result[1]
+    else:
+        is_valid = reachability_result
+        validation_reason = "Reachability check completed."
+
+    return smtp_deliverable, smtp_reason, is_valid, validation_reason
+
         
