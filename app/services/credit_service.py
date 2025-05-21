@@ -1,5 +1,6 @@
-from app.models.credits import Credit, CreditHistory, CreditUsage
 from sqlalchemy.orm import Session
+
+from app.models.credits import Credit, CreditHistory, CreditUsage
 
 
 class CreditService:

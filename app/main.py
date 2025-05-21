@@ -1,21 +1,23 @@
 from contextlib import asynccontextmanager
-from fastapi.responses import JSONResponse
+
+# import jinja2
+from fastapi import FastAPI, Form, Request
 from fastapi.encoders import jsonable_encoder
-from fastapi import FastAPI, Request,Form
-from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import auth, subscription_stripe, user, email
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from app.utils import validator
-import jinja2
-from app.utils.mail_utils import check_email_reachability, validate_email_syntax, get_mx_record, verify_smtp_server, load_disposable_domains
+from fastapi.templating import Jinja2Templates
 
 # from app.middlewares.auth_middleware import AuthMiddleware
 from app.database.db_config import create_database  # Import create_database function
-from app.routes import auth, credit, email, user
-from app.routes.email_verification import router
+from app.routes import auth, credit, email, subscription_stripe, user
 
+# from app.routes.email_verification import router
+# from app.utils import validator
+from app.utils.mail_utils import (  # get_mx_record,; validate_email_syntax,; verify_smtp_server,
+    check_email_reachability,
+    load_disposable_domains,
+)
 
 app = FastAPI()
 
@@ -25,39 +27,33 @@ templates = Jinja2Templates(directory="templates")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request, "result": None})
 
 
-
 @app.post("/", response_class=HTMLResponse)
-async def index_post(
-    request: Request,
-    email: str = Form(...),
-    sender_email: str = Form('test@example.com')
+async def index_post_htmlresponse(
+    request: Request, email: str = Form(...), sender_email: str = Form("test@example.com")
 ):
     result = None
     if email:
         is_valid, message, dm_info = check_email_reachability(email, sender_email, disposable_domains)
         result = {
-            'email': email,
-            'status': 'Valid' if is_valid else 'Invalid',
-            'message': message,
-            'dm_info': dm_info  # Pass WHOIS info to template
-        }
+            "email": email,
+            "status": "Valid" if is_valid else "Invalid",
+            "message": message,
+            "dm_info": dm_info,
+        }  # Pass WHOIS info to template
     else:
         # Flash-like behavior would require session middleware or client-side handling
         pass
     return templates.TemplateResponse("index.html", {"request": request, "result": result})
 
 
-
 @app.post("/realtime-validator-email")
-async def index_post(
-    email: str = Form(...),
-    sender_email: str = Form('test@example.com')
-):
+async def index_post_jsonresponse(email: str = Form(...), sender_email: str = Form("test@example.com")):
     if not email:
         return JSONResponse(status_code=400, content={"error": "Email is required"})
 
@@ -65,11 +61,11 @@ async def index_post(
         is_valid, message, dm_info = check_email_reachability(email, sender_email, disposable_domains)
 
         result = {
-            'email': email,
-            'is_valid': is_valid,
-            'status': 'valid' if is_valid else 'invalid',
-            'message': message,
-            'whois': dm_info  # May contain datetime objects
+            "email": email,
+            "is_valid": is_valid,
+            "status": "valid" if is_valid else "invalid",
+            "message": message,
+            "whois": dm_info,  # May contain datetime objects
         }
 
         # Automatically convert datetime and other non-serializable types
@@ -90,8 +86,6 @@ async def lifespan(app: FastAPI):
     yield  # Application is running here
     # Code to execute during application shutdown
     print("Application is shutting down...")
-
-
 
 
 # Add CORS middleware for cross-origin requests

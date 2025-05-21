@@ -17,9 +17,7 @@ class OTPCreate(BaseModel):
 
 
 class OTPVerify(BaseModel):
-    otp_code: str = Field(
-        ..., min_length=6, max_length=6, description="The OTP to verify"
-    )
+    otp_code: str = Field(..., min_length=6, max_length=6, description="The OTP to verify")
     user_id: str
 
 

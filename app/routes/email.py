@@ -15,9 +15,11 @@ from sqlalchemy.orm import Session
 # from app.utils.email_tools import check_email_reachability, validate_email_syntax
 from app.database.db_config import get_db
 from app.schemas.auth import UserID
-from app.schemas.email import (
+from app.schemas.email import (  # Import your Pydantic models
     AllTestEmailsByFileResponseWrapper,
     AllTestEmaislByUserId,
+    BulkEmailStatsCreateWithEmails,
+    BulkEmailStatsRead,
     FileStatsResponseWrapper,
     TestEmailBase,
     TestEmailResponse,
@@ -25,20 +27,16 @@ from app.schemas.email import (
     TestEmailWrapper,
     dowloadFileWrapper,
 )
-from app.schemas.email import (  # Import your Pydantic models
-    BulkEmailStatsCreateWithEmails,
-    BulkEmailStatsRead,
-)
 from app.schemas.user import UserInfo
-from app.utils.jwt_handler import get_current_user
 from app.services.email_service import EmailService
-
+from app.utils.jwt_handler import get_current_user
 
 router = APIRouter(prefix="/email", tags=["Email Validation Functions"])
 
 
 # @router.post("/test_single_email", response_model=TestEmailWrapper)
-# def create_single_email(test_email: TestEmailBase, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
+# def create_single_email(test_email: TestEmailBase, db: Session = Depends(get_db),
+# user: UserID = Depends(get_current_user)):
 #     service = EmailService(db)
 #     email = service.create_test_email(user.user_Id, test_email) # type: ignore
 
@@ -48,11 +46,10 @@ router = APIRouter(prefix="/email", tags=["Email Validation Functions"])
 #         data=TestEmailBase.model_validate(email),  # validate from SQLAlchemy object
 #     )
 
+
 @router.post("/test_single_email", response_model=TestEmailWrapper)
 async def create_single_email(
-    test_email: TestEmailBase,
-    db: Session = Depends(get_db),
-    user: UserID = Depends(get_current_user)
+    test_email: TestEmailBase, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)
 ):
     service = EmailService(db)
     email = await service.create_test_email(user.user_Id, test_email)
@@ -63,7 +60,6 @@ async def create_single_email(
         data=TestEmailBase.model_validate(email),
     )
 
-    
 
 @router.get("/test_single_email/{test_email_id}", response_model=TestEmailResponseWrapper)
 def get_single_test_email(test_email_id: int, db: Session = Depends(get_db)):
@@ -71,7 +67,9 @@ def get_single_test_email(test_email_id: int, db: Session = Depends(get_db)):
     test_email = service.get_test_email(test_email_id)
 
     return TestEmailResponseWrapper(
-        message="Test email found successfully.", status=status.HTTP_302_FOUND, data=TestEmailResponse.model_validate(test_email)
+        message="Test email found successfully.",
+        status=status.HTTP_302_FOUND,
+        data=TestEmailResponse.model_validate(test_email),
     )
 
 
@@ -81,8 +79,12 @@ def get_all_single_tested_emails_by_user_id(db: Session = Depends(get_db), user:
     Get all test emails for the current user.
     """
     service = EmailService(db)
-    test_emails = service.get_all_test_emails(user.user_Id) # type: ignore
-    return {"message": "All test emails read successfully.", "status": status.HTTP_200_OK, "data": jsonable_encoder(test_emails)}
+    test_emails = service.get_all_test_emails(user.user_Id)  # type: ignore
+    return {
+        "message": "All test emails read successfully.",
+        "status": status.HTTP_200_OK,
+        "data": jsonable_encoder(test_emails),
+    }
 
 
 # Bulk Email Endpoints
@@ -97,7 +99,7 @@ def upload_bulk_email_file(
     user: UserInfo = Depends(get_current_user),
 ):
     service = EmailService(db)
-    result = service.process_bulk_email_file(file, user.user_Id) # type: ignore
+    result = service.process_bulk_email_file(file, user.user_Id)  # type: ignore
 
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
@@ -116,7 +118,7 @@ def create_bulk_email_by_copy_paste(
     user: UserInfo = Depends(get_current_user),
 ):
     service = EmailService(db)
-    result = service.create_bulk_email_with_copy_paste(payload, user.user_Id) # type: ignore
+    result = service.create_bulk_email_with_copy_paste(payload, user.user_Id)  # type: ignore
 
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
@@ -158,7 +160,7 @@ def get_file_stats_by_file_id(
     user: UserID = Depends(get_current_user),
 ):
     service = EmailService(db)
-    stats = service.get_file_stats(file_id, user.user_Id) # type: ignore
+    stats = service.get_file_stats(file_id, user.user_Id)  # type: ignore
 
     if not stats:
         raise HTTPException(status_code=404, detail="File not found or no emails present")
@@ -178,7 +180,7 @@ async def update_filename(
     user: UserInfo = Depends(get_current_user),
 ):
     service = EmailService(db)
-    updated_filename = service.update_file_name_by_id(file_id, new_filename, user.user_Id) # type: ignore 
+    updated_filename = service.update_file_name_by_id(file_id, new_filename, user.user_Id)  # type: ignore
 
     return JSONResponse(
         status_code=status.HTTP_202_ACCEPTED,
@@ -198,7 +200,7 @@ async def delete_single_tested_email(
 ):
     """Soft deletes test email by ID"""
     service = EmailService(db)
-    deleted_email = service.soft_delete_test_email_by_id(test_email_id, user.user_Id) # type: ignore
+    deleted_email = service.soft_delete_test_email_by_id(test_email_id, user.user_Id)  # type: ignore
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,
@@ -218,7 +220,7 @@ async def delete_bulk_emails_file(
 ):
     """Soft delete bulk email stats by ID"""
     service = EmailService(db)
-    deleted_file = service.soft_delete_bulk_emails_file_by_id(file_id, user.user_Id) # type: ignore
+    deleted_file = service.soft_delete_bulk_emails_file_by_id(file_id, user.user_Id)  # type: ignore
 
     return {
         "message": "Bulk emails file have been deleted successfully.",
@@ -235,11 +237,9 @@ def get_emails_for_csv(
     user: UserID = Depends(get_current_user),
 ):
     service = EmailService(db)
-    emails = service.get_emails_for_csv(file_id, user.user_Id, include_risky) # type: ignore
+    emails = service.get_emails_for_csv(file_id, user.user_Id, include_risky)  # type: ignore
     return {
         "message": "Emails fetched successfully.",
         "status": status.HTTP_200_OK,
         "data": [TestEmailResponse.model_validate(jsonable_encoder(email)) for email in emails],
     }
-
-

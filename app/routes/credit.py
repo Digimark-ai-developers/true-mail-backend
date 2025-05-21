@@ -1,18 +1,18 @@
 # from app.middlewares.auth_middleware import get_current_user
 
 from fastapi import APIRouter, Depends, status
-from app.schemas.auth import UserID
-from app.services.credit_service import CreditService
 from sqlalchemy.orm import Session
+
 from app.database.db_config import get_db
-from app.utils.jwt_handler import get_current_user
+from app.schemas.auth import UserID
 from app.schemas.credit import (
     CreditBalanceResponseWrapper,
     CreditHistoryResponseWrapper,
-    CreditUsageResponseWrapper,
     CreditUsageResponse,
+    CreditUsageResponseWrapper,
 )
-
+from app.services.credit_service import CreditService
+from app.utils.jwt_handler import get_current_user
 
 router = APIRouter(prefix="/credits", tags=["Credits"])
 

@@ -1,18 +1,12 @@
 import os
 from logging.config import fileConfig
-<<<<<<< HEAD
-from dotenv import load_dotenv
-from sqlalchemy import engine_from_config, pool
-=======
 
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
->>>>>>> 12fcb66de21985b32d3e62100ab67f4ad27d6191
 from alembic import context
 from app.database.db_config import Base  # this includes declarative_base()
-
-from app.models import email, user, subscriptions_stripe, credits  # noqa: F401
+from app.models import credits, email, subscriptions_stripe, user  # noqa: F401
 
 target_metadata = Base.metadata
 
@@ -28,14 +22,6 @@ config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL"))
 # Interpret the config file for Python logging
 fileConfig(config.config_file_name)
 
-# Import your SQLAlchemy models' Base
-<<<<<<< HEAD
-=======
-from app.database.db_config import Base  # this includes declarative_base()
-
-# Import all models so Alembic can detect them
-from app.models import email, subscriptions_stripe, user
->>>>>>> 12fcb66de21985b32d3e62100ab67f4ad27d6191
 
 target_metadata = Base.metadata
 

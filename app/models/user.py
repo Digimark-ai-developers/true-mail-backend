@@ -45,10 +45,6 @@ class Role(Base):
 class UserPermissionRoles(Base):
     __tablename__ = "user_permission_roles"
 
-    user_id = Column(
-        String, ForeignKey("user.user_id", ondelete="CASCADE"), primary_key=True
-    )
-    role_id = Column(
-        Integer, ForeignKey("roles.role_id", ondelete="CASCADE"), primary_key=True
-    )
+    user_id = Column(String, ForeignKey("user.user_id", ondelete="CASCADE"), primary_key=True)
+    role_id = Column(Integer, ForeignKey("roles.role_id", ondelete="CASCADE"), primary_key=True)
     created_at = Column(DateTime)

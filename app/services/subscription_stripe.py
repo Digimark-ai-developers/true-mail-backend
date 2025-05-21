@@ -1,12 +1,14 @@
-from datetime import datetime, timedelta, timezone
 import uuid
-from fastapi import HTTPException
+from datetime import datetime, timedelta, timezone
+
 import stripe
+from dotenv import load_dotenv
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
+
+from app.models.credits import Credit, CreditHistory
 from app.models.subscriptions_stripe import Invoices
 from app.models.user import User
-from app.models.credits import Credit, CreditHistory
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -14,10 +16,10 @@ load_dotenv()
 # endpoint_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
 # YOUR_DOMAIN = os.getenv("FRONTEND_DOMAIN")
 
-stripe.api_key = "sk_test_51PY76e2MGeqNp340z0BavRh70aMrc5NqSmof5lIAXPzSfgpPBWOUg5YQo8ICUmHyXZhmFDogyklDoG90gmuEFcw400JIZnaQiI"
-endpoint_secret = (
-    "whsec_282f3a4ad56bc05adbeaa907b181be408135945a8f6c3286a7b75fc9c2bf677f"
+stripe.api_key = (
+    "sk_test_51PY76e2MGeqNp340z0BavRh70aMrc5NqSmof5lIAXPzSfgpPBWOUg5YQo8ICUmHyXZhmFDogyklDoG90gmuEFcw400JIZnaQiI"
 )
+endpoint_secret = "whsec_282f3a4ad56bc05adbeaa907b181be408135945a8f6c3286a7b75fc9c2bf677f"
 YOUR_DOMAIN = "http://127.0.0.1:8002"
 
 
@@ -25,9 +27,7 @@ class PaymentService:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_checkout_session(
-        self, email: str, card_title: str, card_price: int, user_id: str, credits: int
-    ):
+    def create_checkout_session(self, email: str, card_title: str, card_price: int, user_id: str, credits: int):
         try:
             session = stripe.checkout.Session.create(
                 payment_method_types=["card"],

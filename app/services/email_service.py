@@ -1,35 +1,32 @@
-from datetime import datetime, timezone
-import re
+import logging
 import os
+import re
+from datetime import datetime, timezone
 from typing import List
+
 from fastapi import HTTPException, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
 from app.models.credits import Credit, CreditUsage
 from app.models.email import BulkEmailStats, TestEmail
 from app.models.user import User
-from app.schemas.email import BulkEmailStatsCreateWithEmails, BulkEmailStatsResponseWithEmails, CreditUsageBase, TestEmailBase
-from app.utils.mail_utils import (
-    load_disposable_domains,
-    validate_email_syntax,
-    get_mx_record,
-    perform_email_checks,
-    get_smtp_provider,
-    evaluate_email_score_and_risk
+from app.schemas.email import (
+    BulkEmailStatsCreateWithEmails,
+    BulkEmailStatsResponseWithEmails,
+    CreditUsageBase,
+    TestEmailBase,
 )
-
-from sqlalchemy.exc import IntegrityError
-from datetime import datetime, timezone
-from fastapi import HTTPException, status
-from app.models.email import TestEmail
-from app.models.user import User
-from app.models.credits import Credit, CreditUsage
-from app.schemas.email import TestEmailBase
-
-
-import logging
+from app.utils.mail_utils import (
+    evaluate_email_score_and_risk,
+    get_mx_record,
+    get_smtp_provider,
+    load_disposable_domains,
+    perform_email_checks,
+    validate_email_syntax,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +35,7 @@ class EmailService:
     def __init__(self, db: Session):
         self.db = db
 
-    async def create_test_email(
-        self,
-        user_id: str,
-        test_email: TestEmailBase,
-        sender_email: str = "test@example.com"
-    ):
+    async def create_test_email(self, user_id: str, test_email: TestEmailBase, sender_email: str = "test@example.com"):
         # Step 1: Validate User
         user = self.db.query(User).filter(User.user_id == user_id).first()
         if not user:
@@ -53,7 +45,7 @@ class EmailService:
         credit = self.db.query(Credit).filter(Credit.user_id == user_id).first()
         if not credit or credit.remaining_credits < 1:
             raise HTTPException(status_code=403, detail="Insufficient credits to test email")
-        
+
         credit.remaining_credits -= 1
         credit.total_credits -= 1
         credit.last_updated = datetime.utcnow()
@@ -74,26 +66,24 @@ class EmailService:
 
         # Step 5: Run consolidated email checks
         smtp_deliverable, smtp_reason, is_valid, validation_reason = perform_email_checks(
-            target_email=target_email,
-            sender_email=sender_email,
-            disposable_domains=disposable_domains
+            target_email=target_email, sender_email=sender_email, disposable_domains=disposable_domains
         )
-        
-        email_domain = target_email.split('@')[-1].lower()
+
+        email_domain = target_email.split("@")[-1].lower()
         is_disposable = int(email_domain in disposable_domains)
-        
-        email_domain = target_email.split('@')[-1].lower()
-        is_deliverable = int(email_domain in disposable_domains)
+
+        email_domain = target_email.split("@")[-1].lower()
+        # is_deliverable = int(email_domain in disposable_domains)
 
         # Extract domain part (e.g., "gmail" from "test@gmail.com")
-        domain_name = target_email.split('@')[-1].split('.')[0]
-        match = re.search(r'@([\w\-]+)\.', target_email)
+        domain_name = target_email.split("@")[-1].split(".")[0]
+        match = re.search(r"@([\w\-]+)\.", target_email)
         domain_name = match.group(1) if match else None
         # Extract domain and name from email
-        
-        local_part = re.sub(r'[^a-zA-Z._-]', '', target_email.split('@')[0])  # Remove numbers/symbols except separators
-        cleaned_name = re.sub(r'[\._-]+', ' ', local_part).strip()  # Replace _, ., - with space
-        full_name = ' '.join(part.capitalize() for part in cleaned_name.split())
+
+        local_part = re.sub(r"[^a-zA-Z._-]", "", target_email.split("@")[0])  # Remove numbers/symbols except separators
+        cleaned_name = re.sub(r"[\._-]+", " ", local_part).strip()  # Replace _, ., - with space
+        full_name = " ".join(part.capitalize() for part in cleaned_name.split())
 
         # Step 5.1: Analyze email string
         email_str = target_email or ""
@@ -105,13 +95,12 @@ class EmailService:
         is_accept_all = "accept" in email_str or "all" in email_str
         has_no_reply = "no-reply" in email_str or "noreply" in email_str
 
-        
         # Extract domain for smtp_provider detection
         try:
-            _, domain = target_email.split('@')
+            _, domain = target_email.split("@")
         except ValueError:
             domain = ""
-        
+
         smtp_provider = get_smtp_provider(domain)
 
         # Refined score & risk evaluation
@@ -124,39 +113,40 @@ class EmailService:
             has_no_reply=has_no_reply,
             domain=email_domain,
             mx_record=mx_record,
-            smtp_provider=smtp_provider
-)
-
+            smtp_provider=smtp_provider,
+        )
 
         # Step 6: Prepare data dictionary with overrides
         email_data = test_email.model_dump()
-        email_data.update({
-            "user_id": user_id,
-            "full_name": full_name or "N/A",
-            "status": "valid" if is_valid else "invalid",
-            "domain": domain_name,
-            "is_deliverable": is_deliverable,
-            "created_at": datetime.now(timezone.utc),
-            'is_risky': is_risky,
-            "soft_delete": False,
-            "is_valid": is_syntax_valid and smtp_deliverable, 
-            "status": "valid" if is_syntax_valid and smtp_deliverable else "invalid",  
-            "mx_record": mx_record,
-            "implicit_mx_record": implicit_mx,
-            "is_deliverable": smtp_deliverable,
-            "reason": validation_reason or smtp_reason,
-            "is_disposable": is_disposable,
-            "alphabetical_characters": alphabetical_count,
-            "has_numerical_characters": numerical_count,
-            "has_unicode_symbols": unicode_symbol_count,
-            "smtp_provider": smtp_provider,
-            "mx_record": mx_record or "",
-            "implicit_mx_record": implicit_mx,
-            'score': score,
-            'has_role': has_role,
-            "is_accept_all":is_accept_all,
-            "has_no_reply": has_no_reply,
-        })
+        email_data.update(
+            {
+                # "status": "valid" if is_valid else "invalid",
+                # "is_deliverable": is_deliverable,
+                # "implicit_mx_record": implicit_mx,
+                # "mx_record": mx_record,
+                "user_id": user_id,
+                "full_name": full_name or "N/A",
+                "domain": domain_name,
+                "created_at": datetime.now(timezone.utc),
+                "is_risky": is_risky,
+                "soft_delete": False,
+                "is_valid": is_syntax_valid and smtp_deliverable,
+                "status": "valid" if is_syntax_valid and smtp_deliverable else "invalid",
+                "is_deliverable": smtp_deliverable,
+                "reason": validation_reason or smtp_reason,
+                "is_disposable": is_disposable,
+                "alphabetical_characters": alphabetical_count,
+                "has_numerical_characters": numerical_count,
+                "has_unicode_symbols": unicode_symbol_count,
+                "smtp_provider": smtp_provider,
+                "mx_record": mx_record or "",
+                "implicit_mx_record": implicit_mx,
+                "score": score,
+                "has_role": has_role,
+                "is_accept_all": is_accept_all,
+                "has_no_reply": has_no_reply,
+            }
+        )
 
         # Step 7: Create DB record
         db_test_email = TestEmail(**email_data)
@@ -186,12 +176,13 @@ class EmailService:
                 status_code=500,
                 detail="Database error occurred while testing email",
             )
-            
-            
+
     def get_test_email(self, test_email_id: int):
         test_email = (
             self.db.query(TestEmail)
-            .filter(TestEmail.id == test_email_id, or_(TestEmail.soft_delete.is_(False), TestEmail.soft_delete.is_(None)))
+            .filter(
+                TestEmail.id == test_email_id, or_(TestEmail.soft_delete.is_(False), TestEmail.soft_delete.is_(None))
+            )
             .first()
         )
         if not test_email:
@@ -332,7 +323,10 @@ class EmailService:
         # Get all bulk files belonging to the user (excluding soft deleted ones)
         bulk_files = (
             self.db.query(BulkEmailStats)
-            .filter(BulkEmailStats.user_id == user_id, or_(BulkEmailStats.soft_delete.is_(False), BulkEmailStats.soft_delete.is_(None)))
+            .filter(
+                BulkEmailStats.user_id == user_id,
+                or_(BulkEmailStats.soft_delete.is_(False), BulkEmailStats.soft_delete.is_(None)),
+            )
             .all()
         )
 
@@ -346,20 +340,28 @@ class EmailService:
         return results
 
     def get_file_stats(self, file_id: int, user_id: str):
-        total_emails = self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id).count()
+        total_emails = (
+            self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id).count()
+        )
 
         if total_emails == 0:
             return None
         duplicate_count = (
-            self.db.query(BulkEmailStats.duplicate_email).filter(BulkEmailStats.id == file_id, BulkEmailStats.user_id == user_id).scalar()
+            self.db.query(BulkEmailStats.duplicate_email)
+            .filter(BulkEmailStats.id == file_id, BulkEmailStats.user_id == user_id)
+            .scalar()
         )
 
         deliverable_count = (
-            self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.is_deliverable.is_(True)).count()
+            self.db.query(TestEmail)
+            .filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.is_deliverable.is_(True))
+            .count()
         )
 
         risky_count = (
-            self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.is_risky.is_(True)).count()
+            self.db.query(TestEmail)
+            .filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.is_risky.is_(True))
+            .count()
         )
 
         undeliverable_count = total_emails - deliverable_count
@@ -553,7 +555,9 @@ class EmailService:
         return bulk_emails
 
     def get_emails_for_csv(self, file_id: int, user_id: str, include_risky: bool):
-        query = self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.soft_delete.is_(False))
+        query = self.db.query(TestEmail).filter(
+            TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.soft_delete.is_(False)
+        )
 
         if include_risky is False:
             query = query.filter(TestEmail.is_risky.is_(False))

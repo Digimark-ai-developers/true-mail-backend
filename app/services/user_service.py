@@ -1,6 +1,8 @@
 # app/services/user_service.py
 from datetime import datetime
+
 from sqlalchemy.orm import Session
+
 from app.models.user import User
 from app.schemas.user import UserProfileRead, UserProfileUpdate
 

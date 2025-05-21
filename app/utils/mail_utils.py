@@ -1,32 +1,35 @@
-#mail_utils.py
+# mail_utils.py
 # this file is handle all main functions of e-mail validator tool
+# import datetime
+import os
 import re
 import smtplib
 import socket
 import ssl
-import time
-import os
-import whois
-import dns.resolver
-import datetime 
-from datetime import timezone
-from email.utils import parseaddr
-from  typing import Optional, Any
 
-def load_disposable_domains(file_path='disposed_email.conf'):
+# import time
+# from datetime import timezone
+from email.utils import parseaddr
+from typing import Optional
+
+import dns.resolver
+import whois
+
+
+def load_disposable_domains(file_path="disposed_email.conf"):
     try:
         if os.path.exists(file_path):
-            with open(file_path, 'r') as f:
+            with open(file_path, "r") as f:
                 domains = [line.strip().lower() for line in f if line.strip()]
             return set(domains)
         else:
-            return set(['mailinator.com', 'tempmail.com', 'fakeinbox.com'])
+            return set(["mailinator.com", "tempmail.com", "fakeinbox.com"])
     except:
-        return set(['mailinator.com', 'tempmail.com', 'fakeinbox.com'])
+        return set(["mailinator.com", "tempmail.com", "fakeinbox.com"])
 
 
 def validate_email_syntax(email):
-    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    pattern = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
     return bool(re.match(pattern, email))
 
 
@@ -35,7 +38,7 @@ def get_mx_record(domain):
         resolver = dns.resolver.Resolver()
         resolver.timeout = 1
         resolver.lifetime = 3
-        records = resolver.resolve(domain, 'MX')
+        records = resolver.resolve(domain, "MX")
         if records:
             mx_records = sorted([(r.preference, r.exchange.to_text()) for r in records], key=lambda x: x[0])
             mx_record = mx_records[0][1]
@@ -43,7 +46,6 @@ def get_mx_record(domain):
         return None, True  # Implicit MX
     except:
         return None, True  # No record found or error = implicit MX
-
 
 
 def verify_smtp_server(mx_record, domain):
@@ -66,13 +68,19 @@ def verify_smtp_server(mx_record, domain):
     except:
         return False
 
+
 def get_smtp_provider(domain: str) -> str:
     provider_map = {
-        "gmail.com": "Google", "googlemail.com": "Google",
-        "yahoo.com": "Yahoo", "ymail.com": "Yahoo",
-        "outlook.com": "Microsoft", "hotmail.com": "Microsoft", "live.com": "Microsoft",
+        "gmail.com": "Google",
+        "googlemail.com": "Google",
+        "yahoo.com": "Yahoo",
+        "ymail.com": "Yahoo",
+        "outlook.com": "Microsoft",
+        "hotmail.com": "Microsoft",
+        "live.com": "Microsoft",
         "aol.com": "AOL",
-        "icloud.com": "Apple", "me.com": "Apple",
+        "icloud.com": "Apple",
+        "me.com": "Apple",
         "protonmail.com": "ProtonMail",
         "zoho.com": "Zoho",
         "gmx.com": "GMX",
@@ -82,32 +90,29 @@ def get_smtp_provider(domain: str) -> str:
     domain = domain.lower()
     return provider_map.get(domain, "Unknown")  # Returns provider name or "Unknown"
 
-def check_email_reachability(email, sender_email, disposable_domains): 
+
+def check_email_reachability(email, sender_email, disposable_domains):
     # Helper function to analyze characters in email address
     def analyze_string(email):
         alphabetic = sum(1 for c in email if c.isalpha())
         numeric = sum(1 for c in email if c.isdigit())
         symbols = len(email) - alphabetic - numeric
-        return {
-            'alphabetic': alphabetic,
-            'numeric': numeric,
-            'symbols': symbols
-        }
+        return {"alphabetic": alphabetic, "numeric": numeric, "symbols": symbols}
 
     result = analyze_string(email)
     print(result)  # Optional: Debugging output for analysis result
-    
+
     # Step 1: Syntax Check
     if not validate_email_syntax(email):
         return False, "Invalid email syntax"
-    
+
     # Step 2: Split the email into local part and domain
     address = parseaddr(email)[1]
     try:
-        _, domain = address.split('@')
+        _, domain = address.split("@")
     except ValueError:
         return False, "Invalid email format"
-    
+
     # Step 3: Disposable Email Check
     if domain.lower() in disposable_domains:
         return False, "Disposable email address detected"
@@ -116,19 +121,17 @@ def check_email_reachability(email, sender_email, disposable_domains):
     dm_info = {}
     try:
         whois_data = whois.whois(domain)
-        dm_info['registrar'] = getattr(whois_data, 'registrar', 'N/A')
-        dm_info['country'] = getattr(whois_data, 'country', 'N/A')
-        dm_info['whois_server'] = getattr(whois_data,'whois_server','N/A')
+        dm_info["registrar"] = getattr(whois_data, "registrar", "N/A")
+        dm_info["country"] = getattr(whois_data, "country", "N/A")
+        dm_info["whois_server"] = getattr(whois_data, "whois_server", "N/A")
     except Exception as e:
-        dm_info = {
-            'error': f"WHOIS lookup failed: {str(e)}"
-        }
+        dm_info = {"error": f"WHOIS lookup failed: {str(e)}"}
 
     # Step 5: MX Record Check
     mx_record, is_implicit = get_mx_record(domain)
     if not mx_record:
         return False, f"Domain '{domain}' has no valid MX records"
-    
+
     # Step 6: SMTP Server Validation
     if not verify_smtp_server(mx_record, domain):
         return False, f"SMTP server for '{domain}' is not accessible"
@@ -141,7 +144,7 @@ def check_email_reachability(email, sender_email, disposable_domains):
         server.ehlo_or_helo_if_needed()
         server.mail(sender_email)
         code, message = server.rcpt(address)
-        message_str = message.decode('utf-8', 'ignore') if hasattr(message, 'decode') else str(message)
+        message_str = message.decode("utf-8", "ignore") if hasattr(message, "decode") else str(message)
 
         if code == 250:
             return True, "VALID", dm_info
@@ -154,10 +157,11 @@ def check_email_reachability(email, sender_email, disposable_domains):
         except:
             pass
 
+
 def perform_email_checks(target_email: str, sender_email: str, disposable_domains: list):
     # Extract domain and provider
     try:
-        domain = target_email.split('@')[1].lower()
+        domain = target_email.split("@")[1].lower()
     except IndexError:
         return False, "Invalid email format", False, "Invalid email format"
 
@@ -208,7 +212,7 @@ def evaluate_email_score_and_risk(
     has_no_reply: bool,
     domain: str,
     mx_record: Optional[str],
-    smtp_provider: Optional[str]
+    smtp_provider: Optional[str],
 ):
     score = 0
     tags = []
@@ -259,4 +263,3 @@ def evaluate_email_score_and_risk(
     is_risky = score < 60  # mark as risky if score is less than 60
 
     return score, is_risky, tags
-

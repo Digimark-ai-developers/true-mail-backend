@@ -1,15 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database.db_config import get_db
 
 # from app.schemas.user import UserInfo
-from app.schemas.auth import UserID, UserInfo, UserRegisterRequest
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    UserID,
+    UserInfo,
+    UserRegisterRequest,
+)
 from app.services.auth_service import AuthService
 from app.utils.jwt_handler import create_jwt_token, get_current_user
-from fastapi import Body
-from app.schemas.auth import ChangePasswordRequest
-
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 

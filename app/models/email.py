@@ -1,12 +1,12 @@
 from sqlalchemy import (
+    Boolean,
     Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
     String,
     Text,
-    Boolean,
-    Integer,
-    DateTime,
-    ForeignKey,
-    Float,
 )
 from sqlalchemy.orm import relationship
 
@@ -22,7 +22,7 @@ class BulkEmailStats(Base):
     user_tested_email = Column(Text)
     duplicate_email = Column(Integer)  # how much duplicates in a file i numbers
     total_valid_emails = Column(Integer)  # how much total valid e-mail
-    email_status = Column(Text)  #  e-mail status is { completed, Cancel, Processing }
+    email_status = Column(Text)  # e-mail status is { completed, Cancel, Processing }
     deliverable = Column(Float)  # is e-mail deliverable
     is_risky = Column(Boolean)  # is that e-mail is risky
     total = Column(Integer)  # total e-mail in files are check
