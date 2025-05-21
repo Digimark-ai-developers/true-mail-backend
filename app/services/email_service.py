@@ -17,8 +17,7 @@ from app.utils.mail_utils import (
     get_mx_record,
     perform_email_checks,
     get_smtp_provider,
-    verify_smtp_server,
-    check_email_reachability
+    evaluate_email_score_and_risk
 )
 
 from sqlalchemy.exc import IntegrityError
@@ -33,6 +32,7 @@ from app.schemas.email import TestEmailBase
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 class EmailService:
     def __init__(self, db: Session):
@@ -78,23 +78,33 @@ class EmailService:
             sender_email=sender_email,
             disposable_domains=disposable_domains
         )
+        
         email_domain = target_email.split('@')[-1].lower()
         is_disposable = int(email_domain in disposable_domains)
         
         email_domain = target_email.split('@')[-1].lower()
         is_deliverable = int(email_domain in disposable_domains)
-        
 
         # Extract domain part (e.g., "gmail" from "test@gmail.com")
         domain_name = target_email.split('@')[-1].split('.')[0]
         match = re.search(r'@([\w\-]+)\.', target_email)
         domain_name = match.group(1) if match else None
+        # Extract domain and name from email
         
+        local_part = re.sub(r'[^a-zA-Z._-]', '', target_email.split('@')[0])  # Remove numbers/symbols except separators
+        cleaned_name = re.sub(r'[\._-]+', ' ', local_part).strip()  # Replace _, ., - with space
+        full_name = ' '.join(part.capitalize() for part in cleaned_name.split())
+
         # Step 5.1: Analyze email string
         email_str = target_email or ""
         alphabetical_count = sum(c.isalpha() for c in email_str)
         numerical_count = sum(c.isdigit() for c in email_str)
         unicode_symbol_count = len(email_str) - alphabetical_count - numerical_count
+        email_str = target_email.lower()
+        has_role = any(role in email_str for role in ["admin", "info", "support", "sales", "contact"])
+        is_accept_all = "accept" in email_str or "all" in email_str
+        has_no_reply = "no-reply" in email_str or "noreply" in email_str
+
         
         # Extract domain for smtp_provider detection
         try:
@@ -104,27 +114,48 @@ class EmailService:
         
         smtp_provider = get_smtp_provider(domain)
 
+        # Refined score & risk evaluation
+        score, is_risky, tags = evaluate_email_score_and_risk(
+            is_syntax_valid=is_syntax_valid,
+            smtp_deliverable=smtp_deliverable,
+            is_disposable=bool(is_disposable),
+            has_role=has_role,
+            is_accept_all=is_accept_all,
+            has_no_reply=has_no_reply,
+            domain=email_domain,
+            mx_record=mx_record,
+            smtp_provider=smtp_provider
+)
+
 
         # Step 6: Prepare data dictionary with overrides
         email_data = test_email.model_dump()
         email_data.update({
             "user_id": user_id,
+            "full_name": full_name or "N/A",
+            "status": "valid" if is_valid else "invalid",
             "domain": domain_name,
             "is_deliverable": is_deliverable,
             "created_at": datetime.now(timezone.utc),
+            'is_risky': is_risky,
             "soft_delete": False,
-            "is_valid": is_valid,
+            "is_valid": is_syntax_valid and smtp_deliverable, 
+            "status": "valid" if is_syntax_valid and smtp_deliverable else "invalid",  
             "mx_record": mx_record,
             "implicit_mx_record": implicit_mx,
             "is_deliverable": smtp_deliverable,
-            "status": "valid" if is_syntax_valid and smtp_deliverable else "invalid",
             "reason": validation_reason or smtp_reason,
             "is_disposable": is_disposable,
-            # is deliverale
             "alphabetical_characters": alphabetical_count,
             "has_numerical_characters": numerical_count,
             "has_unicode_symbols": unicode_symbol_count,
             "smtp_provider": smtp_provider,
+            "mx_record": mx_record or "",
+            "implicit_mx_record": implicit_mx,
+            'score': score,
+            'has_role': has_role,
+            "is_accept_all":is_accept_all,
+            "has_no_reply": has_no_reply,
         })
 
         # Step 7: Create DB record
@@ -155,8 +186,8 @@ class EmailService:
                 status_code=500,
                 detail="Database error occurred while testing email",
             )
-
-
+            
+            
     def get_test_email(self, test_email_id: int):
         test_email = (
             self.db.query(TestEmail)
