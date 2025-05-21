@@ -16,6 +16,12 @@ import os
 load_dotenv()
 
 
+# GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_ID = "832562555316-5dep9dq8veklnqa3ogom7gba8p76eu5t.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+# GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
+GOOGLE_REDIRECT_URI = "http://localhost:8000/auth/google"
+
 
 class AuthService:
     def __init__(self, db: Session):
@@ -85,9 +91,10 @@ class AuthService:
             print(e)
             raise e  # just re-raise the exception
 
+
     def login_with_email_password(self, email: str, password: str) -> User:
-        api_key = os.getenv("FIREBASE_API_KEY")
-        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={api_key}"
+        fire_base_api_key = os.getenv("FIREBASE_API_KEY")
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={fire_base_api_key}"
 
         payload = {
             "email": email,
@@ -104,6 +111,107 @@ class AuthService:
         id_token = data["idToken"]
 
         return id_token
+
+
+    def get_google_oauth_url(self):
+
+        return (
+            f"https://accounts.google.com/o/oauth2/auth"
+            f"?response_type=code"
+            f"&client_id={GOOGLE_CLIENT_ID}"
+            f"&redirect_uri={GOOGLE_REDIRECT_URI}"
+            f"&scope=openid%20profile%20email"
+            f"&access_type=offline"
+            f"&prompt=consent"
+        )
+
+
+    def exchange_code_for_token(self, code: str):
+        token_url = "https://oauth2.googleapis.com/token"
+        data = {
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        }
+
+        response = requests.post(token_url, data=data)
+        if response.status_code != 200:
+            print("❌ Token exchange failed:", response.text)  # <== Add this
+            raise HTTPException(status_code=400, detail="Failed to exchange code for token")
+
+        tokens = response.json()
+        id_token = tokens.get("id_token")
+        access_token = tokens.get("access_token")
+
+        if not id_token or not access_token:
+            raise HTTPException(status_code=400, detail="No id_token or access_token received")
+
+        user_info_response = requests.get(
+            "https://www.googleapis.com/oauth2/v1/userinfo",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+
+        if user_info_response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch user info")
+
+        user_info = user_info_response.json()
+
+        return user_info, id_token  
+
+    def get_or_create_user(self, user_info: dict, firebase_uid: str = None):
+        email = user_info.get("email")
+        name = user_info.get("name")
+        
+        user = self.db.query(User).filter(User.email == email).first()
+        if not user:
+            user = User(
+                user_id=firebase_uid,  # <-- Store Firebase UID here
+                email=email,
+                first_name=name,
+                # add other fields if needed
+            )
+            self.db.add(user)
+            self.db.commit()
+            self.db.refresh(user)
+        else:
+            # Optionally update firebase_uid if changed
+            if firebase_uid and user.user_id != firebase_uid:
+                user.user_id = firebase_uid
+                self.db.commit()
+
+        return user
+
+
+
+
+    def get_user_info(self, access_token: str):
+        user_info_url = "https://www.googleapis.com/oauth2/v1/userinfo"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        response = requests.get(user_info_url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def login_with_google_user_info(self, id_token: str, provider_id="google.com") -> tuple[str, str]:
+        firebase_api_key = os.getenv("FIREBASE_API_KEY")
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={firebase_api_key}"
+
+        payload = {
+            "postBody": f"id_token={id_token}&providerId={provider_id}",
+            "requestUri": GOOGLE_REDIRECT_URI,
+            "returnSecureToken": True
+        }
+
+        response = requests.post(url, json=payload)
+        if response.status_code != 200:
+            error_detail = response.json().get("error", {}).get("message", "Unknown error")
+            raise HTTPException(status_code=401, detail=f"Google sign-in failed: {error_detail}")
+
+        data = response.json()
+        return data["idToken"], data["localId"]  # ✅ return UID too
+
+
 
     def send_password_reset_email(self, email: str):
         try:
