@@ -1,6 +1,10 @@
+import asyncio
+import csv
+import io
 import logging
 import os
 import re
+import uuid
 from datetime import datetime, timezone
 from typing import List
 
@@ -19,7 +23,9 @@ from app.schemas.email import (
     CreditUsageBase,
     TestEmailBase,
 )
+from app.services.credit_service import CreditService
 from app.utils.mail_utils import (
+    analyze_email,
     evaluate_email_score_and_risk,
     get_mx_record,
     get_smtp_provider,
@@ -177,6 +183,112 @@ class EmailService:
                 detail="Database error occurred while testing email",
             )
 
+    async def process_bulk_email_file(self, file, user_id: str, db: Session):
+        file_contents = file.file.read().decode("utf-8")
+        csv_reader = csv.reader(io.StringIO(file_contents))
+        emails = [row[0].strip() for row in csv_reader if row]
+
+        file_name = file.filename or "test_email.csv"
+        file_id = str(uuid.uuid4())
+        created_at = datetime.now(timezone.utc)
+
+        seen_emails = set()
+        duplicate_count = 0
+        valid_count = 0
+        total_count = 0
+
+        bulk_email_objects = []
+        test_email_objects = []
+
+        # Helper function for processing each email
+        async def process_email(email):
+            nonlocal duplicate_count, valid_count, total_count
+
+            total_count += 1
+            if email in seen_emails:
+                duplicate_count += 1
+                return None
+            seen_emails.add(email)
+
+            result = await analyze_email(email)
+
+            # Prepare email data for database insertion
+            email_data = {
+                "user_id": user_id,
+                "full_name": result.get("full_name", "N/A"),
+                "domain": result.get("domain_name"),
+                "created_at": created_at,
+                "is_risky": result.get("is_risky"),
+                "soft_delete": False,
+                "is_valid": result.get("is_syntax_valid") and result.get("smtp_deliverable"),
+                "status": "valid" if result.get("is_syntax_valid") and result.get("smtp_deliverable") else "invalid",
+                "is_deliverable": result.get("smtp_deliverable"),
+                "reason": result.get("validation_reason") or result.get("smtp_reason"),
+                "is_disposable": result.get("is_disposable"),
+                "alphabetical_characters": result.get("alphabetical_count"),
+                "has_numerical_characters": result.get("numerical_count"),
+                "has_unicode_symbols": result.get("unicode_symbol_count"),
+                "smtp_provider": result.get("smtp_provider"),
+                "mx_record": result.get("mx_record", ""),
+                "implicit_mx_record": result.get("implicit_mx"),
+                "score": result.get("score"),
+                "has_role": result.get("has_role"),
+                "is_accept_all": result.get("is_accept_all"),
+                "has_no_reply": result.get("has_no_reply"),
+                "file_id": file_id,
+                "file_name": file_name,
+                "email_status": "processing",
+            }
+
+            # Append email data to the bulk list
+            bulk_email_objects.append(TestEmail(**email_data))
+
+            # Add to test emails if the file name is 'test_email.csv'
+            if file_name == "test_email.csv":
+                test_email_objects.append(BulkEmailStats(**email_data))
+
+            if email_data["is_valid"]:
+                valid_count += 1
+
+        # Concurrently process emails using asyncio.gather()
+        tasks = [process_email(email) for email in emails]
+        await asyncio.gather(*tasks)
+
+        # Store all email data in the DB
+        db.bulk_save_objects(bulk_email_objects)
+        if test_email_objects:
+            db.bulk_save_objects(test_email_objects)
+
+        # Store bulk upload summary (metadata) in BulkEmailStats table
+        bulk_email_summary = {
+            "user_id": user_id,
+            "file_id": file_id,
+            "file_name": file_name,
+            "total": total_count,
+            "duplicate_email": duplicate_count,
+            "total_valid_emails": valid_count,
+            "email_status": "completed",
+            "created_at": created_at,
+        }
+        db.add(BulkEmailStats(**bulk_email_summary))
+
+        # Update credits for valid emails only
+        if valid_count:
+            credit_service = CreditService()
+            credit_service.decrement_credits(db, user_id=user_id, amount=valid_count)
+
+        db.commit()
+
+        return {
+            "file_id": file_id,
+            "file_name": file_name,
+            "total": total_count,
+            "duplicate_email": duplicate_count,
+            "total_valid_emails": valid_count,
+            "email_status": "completed",
+            "created_at": created_at,
+        }
+
     def get_test_email(self, test_email_id: int):
         test_email = (
             self.db.query(TestEmail)
@@ -198,7 +310,7 @@ class EmailService:
             .all()
         )
 
-    def process_bulk_email_file(self, file: UploadFile, user_id: str) -> BulkEmailStatsResponseWithEmails:
+    def process_bulk_email_filee(self, file: UploadFile, user_id: str) -> BulkEmailStatsResponseWithEmails:
         # ✅ Step 1: Read and extract emails from file
         try:
             contents = file.file.read().decode("utf-8")

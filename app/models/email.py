@@ -18,14 +18,15 @@ class BulkEmailStats(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, ForeignKey("user.user_id"))
-    file_name = Column(String(255))
-    user_tested_email = Column(Text)
-    duplicate_email = Column(Integer)  # how much duplicates in a file i numbers
+    file_name = Column(String(255))  # user can create the file name edit but by dafult file name is (test-file.csv)
+    duplicate_email = Column(
+        Integer
+    )  # how much duplicates email in a file that is associated with table test_email and field file_id
     total_valid_emails = Column(Integer)  # how much total valid e-mail
-    email_status = Column(Text)  # e-mail status is { completed, Cancel, Processing }
+    status = Column(Text)  # e-mail status is { completed, Cancel, Processing }
     deliverable = Column(Float)  # is e-mail deliverable
-    is_risky = Column(Boolean)  # is that e-mail is risky
-    total = Column(Integer)  # total e-mail in files are check
+    risky = Column(Boolean)  # how much total risky e-mail in file that is associalted with file_id number
+    total = Column(Integer)  # total e-mail in files that is associated with file_id number
     created_at = Column(DateTime)
     soft_delete = Column(Boolean)
 

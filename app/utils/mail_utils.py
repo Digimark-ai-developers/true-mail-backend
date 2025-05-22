@@ -1,14 +1,10 @@
-# mail_utils.py
+# app\utils\mail_utils.py
 # this file is handle all main functions of e-mail validator tool
-# import datetime
 import os
 import re
 import smtplib
 import socket
 import ssl
-
-# import time
-# from datetime import timezone
 from email.utils import parseaddr
 from typing import Optional
 
@@ -263,3 +259,86 @@ def evaluate_email_score_and_risk(
     is_risky = score < 60  # mark as risky if score is less than 60
 
     return score, is_risky, tags
+
+
+async def analyze_email(email: str, sender_email: str = "test@example.com"):
+    # Load disposable domain list
+    disposable_domains = load_disposable_domains()
+
+    # Validate syntax
+    is_syntax_valid = validate_email_syntax(email)
+
+    # Extract domain
+    email_domain = email.split("@")[-1].lower()
+    domain_name = email_domain.split(".")[0]
+    match = re.search(r"@([\w\-]+)\.", email)
+    domain_name = match.group(1) if match else domain_name
+
+    # Full name extraction
+    local_part = re.sub(r"[^a-zA-Z._-]", "", email.split("@")[0])
+    cleaned_name = re.sub(r"[\._-]+", " ", local_part).strip()
+    full_name = " ".join(part.capitalize() for part in cleaned_name.split()) or "N/A"
+
+    # MX Record
+    mx_record_result = get_mx_record(email)
+    mx_record = mx_record_result[0] if mx_record_result else ""
+    implicit_mx = mx_record_result[1] if mx_record_result and len(mx_record_result) > 1 else ""
+
+    # SMTP and validity
+    smtp_deliverable, smtp_reason, is_valid, validation_reason = perform_email_checks(
+        target_email=email, sender_email=sender_email, disposable_domains=disposable_domains
+    )
+
+    is_disposable = int(email_domain in disposable_domains)
+
+    # Character analysis
+    alphabetical_count = sum(c.isalpha() for c in email)
+    numerical_count = sum(c.isdigit() for c in email)
+    unicode_symbol_count = len(email) - alphabetical_count - numerical_count
+
+    # Tag detection
+    lower_email = email.lower()
+    has_role = any(role in lower_email for role in ["admin", "info", "support", "sales", "contact"])
+    is_accept_all = "accept" in lower_email or "all" in lower_email
+    has_no_reply = "no-reply" in lower_email or "noreply" in lower_email
+
+    # SMTP provider
+    try:
+        _, domain = email.split("@")
+    except ValueError:
+        domain = ""
+    smtp_provider = get_smtp_provider(domain)
+
+    # Scoring
+    score, is_risky, tags = evaluate_email_score_and_risk(
+        is_syntax_valid=is_syntax_valid,
+        smtp_deliverable=smtp_deliverable,
+        is_disposable=bool(is_disposable),
+        has_role=has_role,
+        is_accept_all=is_accept_all,
+        has_no_reply=has_no_reply,
+        domain=email_domain,
+        mx_record=mx_record,
+        smtp_provider=smtp_provider,
+    )
+
+    return {
+        "full_name": full_name,
+        "domain_name": domain_name,
+        "is_risky": is_risky,
+        "is_syntax_valid": is_syntax_valid,
+        "smtp_deliverable": smtp_deliverable,
+        "validation_reason": validation_reason,
+        "smtp_reason": smtp_reason,
+        "is_disposable": is_disposable,
+        "alphabetical_count": alphabetical_count,
+        "numerical_count": numerical_count,
+        "unicode_symbol_count": unicode_symbol_count,
+        "smtp_provider": smtp_provider,
+        "mx_record": mx_record,
+        "implicit_mx": implicit_mx,
+        "score": score,
+        "has_role": has_role,
+        "is_accept_all": is_accept_all,
+        "has_no_reply": has_no_reply,
+    }

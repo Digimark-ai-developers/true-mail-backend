@@ -12,10 +12,10 @@ class UserBase(BaseModel):
 
 class BulkEmailStatsBase(BaseModel):
     file_name: str
-    user_tested_email: Optional[str] = None  # Added can be None for testing purposes
+    # user_tested_email: Optional[str] = None  # Added can be None for testing purposes
     duplicate_email: int
     total_valid_emails: int
-    email_status: Optional[str] = None  # Added can be None for testing purposes
+    status: Optional[str] = None  # Added can be None for testing purposes
     deliverable: float
     total: int
     soft_delete: bool

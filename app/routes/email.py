@@ -1,3 +1,4 @@
+# app\routes\email.py
 from fastapi import (
     APIRouter,
     Body,
@@ -32,19 +33,6 @@ from app.services.email_service import EmailService
 from app.utils.jwt_handler import get_current_user
 
 router = APIRouter(prefix="/email", tags=["Email Validation Functions"])
-
-
-# @router.post("/test_single_email", response_model=TestEmailWrapper)
-# def create_single_email(test_email: TestEmailBase, db: Session = Depends(get_db),
-# user: UserID = Depends(get_current_user)):
-#     service = EmailService(db)
-#     email = service.create_test_email(user.user_Id, test_email) # type: ignore
-
-#     return TestEmailWrapper(
-#         message="Email tested successfully.",
-#         status=status.HTTP_201_CREATED,
-#         data=TestEmailBase.model_validate(email),  # validate from SQLAlchemy object
-#     )
 
 
 @router.post("/test_single_email", response_model=TestEmailWrapper)
@@ -87,26 +75,25 @@ def get_all_single_tested_emails_by_user_id(db: Session = Depends(get_db), user:
     }
 
 
-# Bulk Email Endpoints
 @router.post(
     "/bulk_email_stats_with_emails/upload",
     summary="Upload a file (.csv or .txt) to create bulk email stats",
     tags=["Bulk-Emails Uplaod By File (.csv, .txt .....)"],
 )
-def upload_bulk_email_file(
+async def upload_bulk_email_file(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: UserInfo = Depends(get_current_user),
 ):
-    service = EmailService(db)
-    result = service.process_bulk_email_file(file, user.user_Id)  # type: ignore
+    service = EmailService(db)  # ✅ Corrected this line
+    result = await service.process_bulk_email_file(file, user.user_Id, db)
 
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
         content={
             "message": "Bulk emails created successfully from file",
             "Status_Code": status.HTTP_201_CREATED,
-            "data": result.dict(),
+            "data": result,
         },
     )
 
