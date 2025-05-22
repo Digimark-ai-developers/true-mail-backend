@@ -9,10 +9,10 @@ from app.models.credits import Credit
 from app.models.user import User
 from app.schemas.auth import UserRegisterRequest
 from app.utils.email_service import send_email_with_link
-from app.utils.firebase import verify_firebase_token
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 import os
+
 load_dotenv()
 
 
@@ -91,7 +91,6 @@ class AuthService:
             print(e)
             raise e  # just re-raise the exception
 
-
     def login_with_email_password(self, email: str, password: str) -> User:
         fire_base_api_key = os.getenv("FIREBASE_API_KEY")
         url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={fire_base_api_key}"
@@ -107,11 +106,9 @@ class AuthService:
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         data = response.json()
-        uid = data["localId"]
         id_token = data["idToken"]
 
         return id_token
-
 
     def get_google_oauth_url(self):
 
@@ -124,7 +121,6 @@ class AuthService:
             f"&access_type=offline"
             f"&prompt=consent"
         )
-
 
     def exchange_code_for_token(self, code: str):
         token_url = "https://oauth2.googleapis.com/token"
@@ -148,22 +144,19 @@ class AuthService:
         if not id_token or not access_token:
             raise HTTPException(status_code=400, detail="No id_token or access_token received")
 
-        user_info_response = requests.get(
-            "https://www.googleapis.com/oauth2/v1/userinfo",
-            headers={"Authorization": f"Bearer {access_token}"}
-        )
+        user_info_response = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"})
 
         if user_info_response.status_code != 200:
             raise HTTPException(status_code=400, detail="Failed to fetch user info")
 
         user_info = user_info_response.json()
 
-        return user_info, id_token  
+        return user_info, id_token
 
     def get_or_create_user(self, user_info: dict, firebase_uid: str = None):
         email = user_info.get("email")
         name = user_info.get("name")
-        
+
         user = self.db.query(User).filter(User.email == email).first()
         if not user:
             user = User(
@@ -183,9 +176,6 @@ class AuthService:
 
         return user
 
-
-
-
     def get_user_info(self, access_token: str):
         user_info_url = "https://www.googleapis.com/oauth2/v1/userinfo"
         headers = {"Authorization": f"Bearer {access_token}"}
@@ -197,11 +187,7 @@ class AuthService:
         firebase_api_key = os.getenv("FIREBASE_API_KEY")
         url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={firebase_api_key}"
 
-        payload = {
-            "postBody": f"id_token={id_token}&providerId={provider_id}",
-            "requestUri": GOOGLE_REDIRECT_URI,
-            "returnSecureToken": True
-        }
+        payload = {"postBody": f"id_token={id_token}&providerId={provider_id}", "requestUri": GOOGLE_REDIRECT_URI, "returnSecureToken": True}
 
         response = requests.post(url, json=payload)
         if response.status_code != 200:
@@ -210,8 +196,6 @@ class AuthService:
 
         data = response.json()
         return data["idToken"], data["localId"]  # ✅ return UID too
-
-
 
     def send_password_reset_email(self, email: str):
         try:

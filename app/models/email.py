@@ -19,11 +19,11 @@ class BulkEmailStats(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, ForeignKey("user.user_id"))
     file_name = Column(String(255))
-    user_tested_email = Column(Text)
-    duplicate_email = Column(Integer)  # how much duplicates in a file i numbers
-    total_valid_emails = Column(Integer)
+    # user_tested_email = Column(Text)
+    # duplicate_email = Column(Integer)  # how much duplicates in a file i numbers
+    # total_valid_emails = Column(Integer)
     status = Column(String)
-    deliverable = Column(Float)
+    # deliverable = Column(Float)
     total = Column(Integer)
     soft_delete = Column(Boolean)
     created_at = Column(DateTime)

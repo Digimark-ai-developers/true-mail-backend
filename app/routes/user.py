@@ -11,6 +11,21 @@ router = APIRouter(prefix="/user", tags=["User "])
 
 @router.get("/profile", response_model=UserProfileReadWrapper, summary="Get user profile")
 def get_user_profile(user: UserID = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Retrieve the currently authenticated user's profile.
+
+    Args:
+
+        user (UserID): The authenticated user object retrieved via dependency injection.
+
+    Returns:
+
+        UserProfileReadWrapper: Contains message, status code, and user profile details.
+
+    Raises:
+
+        HTTPException: 404 if the user profile is not found.
+    """
     profile = fetch_user_profile(user.user_Id, db)
     if not profile:
         raise HTTPException(status_code=404, detail="User not found")
@@ -24,6 +39,21 @@ def update_user_profile_route(
     user: UserID = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """
+    Retrieve the currently authenticated user's profile.
+
+    Args:
+
+        user (UserID): The authenticated user object retrieved via dependency injection.
+
+    Returns:
+
+        UserProfileReadWrapper: Contains message, status code, and user profile details.
+
+    Raises:
+
+        HTTPException: 404 if the user profile is not found.
+    """
     updated_user = update_user_profile(user.user_Id, user_data, db)
     if not updated_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")

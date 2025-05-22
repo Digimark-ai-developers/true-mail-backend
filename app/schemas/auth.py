@@ -1,6 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 
+
 class UserRegisterRequest(BaseModel):
     email: EmailStr
     password: str
@@ -44,7 +45,7 @@ class UserInfo(BaseModel):
     user_Id: str
     email: EmailStr
     first_name: str
-    last_name: str 
+    last_name: str
     photoURL: Optional[str]
 
     class Config:

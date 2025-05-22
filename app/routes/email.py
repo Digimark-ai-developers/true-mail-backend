@@ -41,6 +41,21 @@ router = APIRouter(prefix="/email", tags=["Email Validation Functions"])
 
 @router.post("/test_single_email", response_model=TestEmailWrapper)
 def create_single_email(test_email: TestEmailBase, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
+    """
+    Test a single email and store the result.
+
+    Args:
+
+        request (Request): Incoming HTTP request containing the email to be tested.
+
+    Returns:
+
+        JSONResponse: Result of the email test.
+
+    Raises:
+
+        HTTPException: If email is missing or invalid.
+    """
     service = EmailService(db)
     email = service.create_test_email(user.user_Id, test_email)
 
@@ -53,6 +68,21 @@ def create_single_email(test_email: TestEmailBase, db: Session = Depends(get_db)
 
 @router.get("/test_single_email/{test_email_id}", response_model=TestEmailResponseWrapper)
 def get_single_test_email(test_email_id: int, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
+    """
+    Retrieve a single tested email by its ID.
+
+    Args:
+
+        email_id (int): ID of the tested email to retrieve.
+
+    Returns:
+
+        JSONResponse: The tested email data.
+
+    Raises:
+
+        HTTPException: If the email with given ID is not found.
+    """
     service = EmailService(db)
     test_email = service.get_test_email(test_email_id, user.user_Id)
 
@@ -63,6 +93,13 @@ def get_single_test_email(test_email_id: int, db: Session = Depends(get_db), use
 
 @router.get("/recent_tested_emails", response_model=AllTestEmaislOrderedByCreationTime)
 async def get_all_recent_tested_emails(db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
+    """
+    Get all tested emails ordered by creation time.
+
+    Returns:
+
+        JSONResponse: List of all tested emails.
+    """
     """Get all tested emails ordered by creation time"""
     service = EmailService(db)
     test_emails = service.get_emails_by_creation_time(user.user_Id)
@@ -75,6 +112,17 @@ async def get_all_recent_tested_emails(db: Session = Depends(get_db), user: User
 
 @router.get("/all_single_tested_emails", response_model=AllTestEmaislByUserId)
 def get_all_single_tested_emails_by_user_id(db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
+    """
+    Get all test emails for the current user.
+
+    Args:
+
+        current_user (User): The currently authenticated user.
+
+    Returns:
+
+        JSONResponse: List of emails tested by the user.
+    """
     """
     Get all test emails for the current user.
     """
@@ -90,6 +138,22 @@ def upload_bulk_emails_file(
     db: Session = Depends(get_db),
     user: UserInfo = Depends(get_current_user),
 ):
+    """
+    Upload a CSV or TXT file to test bulk emails and generate stats.
+
+    Args:
+
+        file (UploadFile): The uploaded CSV or TXT file containing emails.
+        current_user (User): The currently authenticated user.
+
+    Returns:
+
+        JSONResponse: Summary of tested emails and stats.
+
+    Raises:
+
+        HTTPException: If file format is unsupported or processing fails.
+    """
     service = EmailService(db)
     result = service.process_bulk_email_file(file, user.user_Id)
 
@@ -109,6 +173,22 @@ def create_bulk_email_by_copy_paste(
     db: Session = Depends(get_db),
     user: UserInfo = Depends(get_current_user),
 ):
+    """
+    Test bulk emails by providing a list of emails directly (copy/paste).
+
+    Args:
+
+        emails (List[str]): List of email addresses to test.
+        current_user (User): The currently authenticated user.
+
+    Returns:
+
+        JSONResponse: Result summary of tested emails.
+
+    Raises:
+
+        HTTPException: If input is invalid or testing fails.
+    """
     service = EmailService(db)
     result = service.create_bulk_email_with_copy_paste(payload, user.user_Id)
 
@@ -127,6 +207,17 @@ def get_all_bulk_emails_grouped_by_files(
     db: Session = Depends(get_db),
     user: UserID = Depends(get_current_user),
 ):
+    """
+    Get all bulk tested emails grouped by uploaded files.
+
+    Args:
+
+        current_user (User): The currently authenticated user.
+
+    Returns:
+
+        JSONResponse: List of grouped email test results.
+    """
 
     service = EmailService(db)
     grouped_emails = service.get_all_emails_grouped_by_files(user.user_Id)
@@ -151,6 +242,17 @@ def get_file_stats_by_file_id(
     db: Session = Depends(get_db),
     user: UserID = Depends(get_current_user),
 ):
+    """
+    Get all bulk tested emails grouped by uploaded files.
+
+    Args:
+
+        current_user (User): The currently authenticated user.
+
+    Returns:
+
+        JSONResponse: List of grouped email test results.
+    """
     service = EmailService(db)
     stats = service.get_file_stats(file_id, user.user_Id)
 
@@ -171,6 +273,23 @@ async def update_filename(
     new_filename: str = Query(...),
     user: UserInfo = Depends(get_current_user),
 ):
+    """
+    Update the filename of an uploaded bulk email file.
+
+    Args:
+
+        file_id (int): ID of the file to rename.
+        new_filename (str): New name for the file.
+        current_user (User): The currently authenticated user.
+
+    Returns:
+
+        JSONResponse: Confirmation of the renamed file.
+
+    Raises:
+
+        HTTPException: If the file is not found or renaming fails.
+    """
     service = EmailService(db)
     updated_filename = service.update_file_name_by_id(file_id, new_filename, user.user_Id)
 
@@ -190,7 +309,21 @@ async def delete_single_tested_email(
     db: Session = Depends(get_db),
     user: UserInfo = Depends(get_current_user),
 ):
-    """Soft deletes test email by ID"""
+    """
+    Soft delete a single tested email by its ID.
+
+    Args:
+
+        email_id (int): ID of the tested email to delete.
+
+    Returns:
+
+        JSONResponse: Confirmation of deletion.
+
+    Raises:
+
+        HTTPException: If the email is not found.
+    """
     service = EmailService(db)
     deleted_email = service.soft_delete_test_email_by_id(test_email_id, user.user_Id)
 
@@ -210,7 +343,21 @@ async def delete_bulk_emails_file(
     db: Session = Depends(get_db),
     user: UserInfo = Depends(get_current_user),
 ):
-    """Soft delete bulk email stats by ID"""
+    """
+    Soft delete a bulk email file and all associated emails by file ID.
+
+    Args:
+
+        file_id (int): ID of the uploaded file.
+
+    Returns:
+
+        JSONResponse: Confirmation of deletion.
+
+    Raises:
+
+        HTTPException: If the file is not found.
+    """
     service = EmailService(db)
     deleted_file = service.soft_delete_bulk_emails_file_by_id(file_id, user.user_Id)
 
@@ -228,6 +375,22 @@ def get_emails_for_csv(
     db: Session = Depends(get_db),
     user: UserID = Depends(get_current_user),
 ):
+    """
+    Get all emails from a file, optionally including risky ones, for CSV download.
+
+    Args:
+
+        file_id (int): ID of the uploaded file.
+        include_risky (bool): Whether to include risky emails.
+
+    Returns:
+
+        StreamingResponse: CSV file with email data.
+
+    Raises:
+
+        HTTPException: If file is not found or data retrieval fails.
+    """
     service = EmailService(db)
     emails = service.get_emails_for_csv(file_id, user.user_Id, include_risky)
     return {
@@ -239,6 +402,18 @@ def get_emails_for_csv(
 
 @router.get("/all_files_with_delieved_emails_and_status", response_model=FileStatsResponse)
 def get_user_files(user: UserInfo = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Get all uploaded files with their delivered email stats and status.
+
+    Args:
+
+        current_user (User): The currently authenticated user.
+
+    Returns:
+
+        JSONResponse: List of uploaded files with statistics.
+    """
+
     service = EmailService(db)
     files_data = service.get_all_files_with_delieved_emails_and_status(user.user_Id)
     return {"message": "Files fetched successfully.", "status": status.HTTP_200_OK, "data": files_data}
