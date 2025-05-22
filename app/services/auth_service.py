@@ -1,4 +1,4 @@
-# app/services/auth_service.py
+## app/services/auth_service.py
 from firebase_admin import auth
 from fastapi import HTTPException, status
 from firebase_admin import auth as firebase_auth
@@ -16,11 +16,11 @@ import os
 load_dotenv()
 
 
-# GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-GOOGLE_CLIENT_ID = "832562555316-5dep9dq8veklnqa3ogom7gba8p76eu5t.apps.googleusercontent.com"
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+# GOOGLE_CLIENT_ID = "832562555316-5dep9dq8veklnqa3ogom7gba8p76eu5t.apps.googleusercontent.com"
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
-# GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
-GOOGLE_REDIRECT_URI = "http://localhost:8000/auth/google"
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
+# GOOGLE_REDIRECT_URI = "https://true-mail-backend.vercel.app/auth/google"
 
 
 class AuthService:

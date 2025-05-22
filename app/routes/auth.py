@@ -5,7 +5,7 @@ from urllib.parse import urlencode
 from app.database.db_config import get_db
 
 # from app.schemas.user import UserInfo
-from app.schemas.auth import UserID, UserInfo, UserRegisterRequest
+from app.schemas.auth import ForgotPasswordRequest, UserID, UserInfo, UserRegisterRequest
 from app.services.auth_service import AuthService
 from app.utils.jwt_handler import get_current_user
 from fastapi import Body
@@ -163,7 +163,7 @@ def auth_google(code: str, db: Session = Depends(get_db)):
                 "token": firebase_id_token,
             }
         )
-        frontend_redirect = f"http://localhost:5173/home?{params}"
+        frontend_redirect = f"https://true-mail-frontend.vercel.app/home?{params}"
         return RedirectResponse(url=frontend_redirect)
 
     except Exception as e:
@@ -171,35 +171,32 @@ def auth_google(code: str, db: Session = Depends(get_db)):
 
 
 @router.post("/forgot_password")
-def forgot_password(email: str, db: Session = Depends(get_db)):
+def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """
     Send a password reset email to the user.
 
     Args:
-
-        email (str): Registered email address of the user.
+        request (ForgotPasswordRequest): Request body containing:
+            - email (str): Registered email address of the user.
 
     Returns:
-
         dict: Success message and HTTP 200 status code.
 
     Raises:
-
         HTTPException: 400 if the email is invalid or user does not exist.
     """
     auth_service = AuthService(db)
     try:
-        auth_service.send_password_reset_email(email)
+        auth_service.send_password_reset_email(request.email)
         return {
             "message": "Password reset email sent successfully.",
             "status_code": status.HTTP_200_OK,
         }
     except HTTPException as e:
-        # re-raise so FastAPI handles HTTPException properly
         raise e
     except Exception as e:
-        # catch other errors if you want, or let them propagate
         raise HTTPException(status_code=400, detail=str(e))
+
 
 
 @router.post("/change_password")
