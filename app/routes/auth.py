@@ -168,6 +168,27 @@ def auth_google(code: str, db: Session = Depends(get_db)):
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+    
+@router.get("/login_github")
+def login_github():
+    auth_service = AuthService(None)  # no DB needed here
+    return {"url": auth_service.get_github_oauth_url()}
+
+@router.get("/github")
+def auth_github(code: str, db: Session = Depends(get_db)):
+    try:
+        auth_service = AuthService(db)
+        user_info, github_access_token = auth_service.exchange_code_for_github_token(code)
+        firebase_id_token, firebase_uid = auth_service.login_with_github_access_token(github_access_token)
+        auth_service.get_or_create_user(user_info, firebase_uid=firebase_uid)
+
+        params = urlencode({"token": firebase_id_token})
+        return RedirectResponse(f"https://your-frontend-url/home?{params}")
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 
 
 @router.post("/forgot_password")
