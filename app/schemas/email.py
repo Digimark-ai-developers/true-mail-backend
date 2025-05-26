@@ -28,26 +28,29 @@ class TestEmailBase(BaseModel):
     gender: Optional[str] = None
     status: Optional[str] = None
     reason: Optional[str] = None
-    domain: str
-    is_free: bool
-    is_risky: bool
-    is_valid: bool
-    is_disposable: bool
-    is_deliverable: bool
-    has_tag: bool
-    alphabetical_characters: int
-    is_mailbox_full: bool
-    has_role: bool
-    is_accept_all: bool
-    has_numerical_characters: int
-    has_unicode_symbols: int
-    has_no_reply: bool
+    domain: Optional[str] = None
+
+    is_free: Optional[bool] = None
+    is_risky: Optional[bool] = None
+    is_valid: Optional[bool] = None
+    is_disposable: Optional[bool] = None
+    is_deliverable: Optional[bool] = None
+    has_tag: Optional[bool] = None
+    is_mailbox_full: Optional[bool] = None
+    has_role: Optional[bool] = None
+    is_accept_all: Optional[bool] = None
+    has_no_reply: Optional[bool] = None
+
+    alphabetical_characters: Optional[int] = None
+    has_numerical_characters: Optional[int] = None
+    has_unicode_symbols: Optional[int] = None
+    score: Optional[int] = None
+
     smtp_provider: Optional[str] = None
     mx_record: Optional[str] = None
     implicit_mx_record: Optional[str] = None
-    score: int
 
-    model_config = ConfigDict(from_attributes=True)  # Pydantic v2 replacement for orm_mode=True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TestEmailWrapper(BaseModel):
@@ -83,6 +86,7 @@ class TestEmailResponse(BaseModel):
     score: int  # available
 
     model_config = ConfigDict(from_attributes=True)  # Pydantic v2 replacement for orm_mode=True
+
 
 
 class TestEmailResponseWrapper(BaseModel):

@@ -8,6 +8,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from typing import Annotated  # Optional
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -21,6 +22,7 @@ from app.schemas.email import (
     AllTestEmaislOrderedByCreationTime,
     FileStatsResponse,
     FileStatsResponseWrapper,
+    SimpleEmailCheckRequest,
     TestEmailBase,
     TestEmailResponse,
     TestEmailResponseWrapper,
@@ -34,37 +36,27 @@ from app.schemas.email import (  # Import your Pydantic models
 from app.schemas.user import UserInfo
 from app.utils.jwt_handler import get_current_user
 from app.services.email_service import EmailService
+from app.utils.mail_utils import check_email_reachability, load_disposable_domains
 
 
 router = APIRouter(prefix="/email", tags=["Email Validation Functions"])
 
+DEFAULT_SENDER_EMAIL = "verify@example.com"
+DISPOSABLE_DOMAINS = load_disposable_domains()
+
 
 @router.post("/test_single_email", response_model=TestEmailWrapper)
-def create_single_email(test_email: TestEmailBase, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
-    """
-    Test a single email and store the result.
-
-    Args:
-
-        request (Request): Incoming HTTP request containing the email to be tested.
-
-    Returns:
-
-        JSONResponse: Result of the email test.
-
-    Raises:
-
-        HTTPException: If email is missing or invalid.
-    """
+async def create_single_email(
+    test_email: TestEmailBase, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)
+):
     service = EmailService(db)
-    email = service.create_test_email(user.user_Id, test_email)
+    email = await service.create_test_email(user.user_Id, test_email)
 
     return TestEmailWrapper(
         message="Email tested successfully.",
         status=status.HTTP_201_CREATED,
-        data=TestEmailBase.model_validate(email),  # validate from SQLAlchemy object
+        data=TestEmailBase.model_validate(email),
     )
-
 
 @router.get("/test_single_email/{test_email_id}", response_model=TestEmailResponseWrapper)
 def get_single_test_email(test_email_id: int, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
@@ -89,6 +81,8 @@ def get_single_test_email(test_email_id: int, db: Session = Depends(get_db), use
     return TestEmailResponseWrapper(
         message="Test email found successfully.", status=status.HTTP_302_FOUND, data=TestEmailResponse.model_validate(test_email)
     )
+
+
 
 
 @router.get("/recent_tested_emails", response_model=AllTestEmaislOrderedByCreationTime)
