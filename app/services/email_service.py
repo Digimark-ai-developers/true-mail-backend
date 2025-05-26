@@ -25,6 +25,7 @@ from app.utils.mail_utils import (
 class EmailService:
     def __init__(self, db: Session):
         self.db = db
+
     async def create_test_email(self, user_id: str, test_email: TestEmailBase, sender_email: str = "test@example.com"):
         # Step 1: Validate User
         user = self.db.query(User).filter(User.user_id == user_id).first()
