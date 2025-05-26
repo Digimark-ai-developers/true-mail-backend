@@ -25,7 +25,7 @@ class BulkEmailStats(Base):
     total_valid_emails = Column(Integer)  # how much total valid e-mail
     status = Column(Text)  # e-mail status is { completed, Cancel, Processing }
     deliverable = Column(Float)  # is e-mail deliverable
-    risky = Column(Boolean)  # how much total risky e-mail in file that is associalted with file_id number
+    risky = Column(Integer)  # how much total risky e-mail in file that is associalted with file_id number
     total = Column(Integer)  # total e-mail in files that is associated with file_id number
     created_at = Column(DateTime)
     soft_delete = Column(Boolean)

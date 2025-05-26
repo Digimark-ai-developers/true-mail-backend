@@ -1,4 +1,6 @@
 # app\routes\email.py
+
+
 from fastapi import (
     APIRouter,
     Body,
@@ -78,24 +80,38 @@ def get_all_single_tested_emails_by_user_id(db: Session = Depends(get_db), user:
 @router.post(
     "/bulk_email_stats_with_emails/upload",
     summary="Upload a file (.csv or .txt) to create bulk email stats",
-    tags=["Bulk-Emails Uplaod By File (.csv, .txt .....)"],
+    tags=["Bulk-Emails Upload By File (.csv, .txt .....)"],
 )
 async def upload_bulk_email_file(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     user: UserInfo = Depends(get_current_user),
 ):
-    service = EmailService(db)  # ✅ Corrected this line
-    result = await service.process_bulk_email_file(file, user.user_Id, db)
+    # Check if the file is a CSV
+    if file.filename.endswith(".csv"):
+        try:
+            # Read the file content
+            contents = await file.read()
+            file_content = contents.decode("utf-8")
 
-    return JSONResponse(
-        status_code=status.HTTP_201_CREATED,
-        content={
-            "message": "Bulk emails created successfully from file",
-            "Status_Code": status.HTTP_201_CREATED,
-            "data": result,
-        },
-    )
+            # Initialize the service
+            service = EmailService(db)
+
+            # Process the CSV content
+            result = await service.validate_emails_from_csv(file_content)
+
+            return JSONResponse(
+                status_code=status.HTTP_201_CREATED,
+                content={
+                    "message": "Bulk emails created successfully from file",
+                    "Status_Code": status.HTTP_201_CREATED,
+                    "data": result,
+                },
+            )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+    else:
+        raise HTTPException(status_code=400, detail="File type not supported. Please upload a CSV file.")
 
 
 @router.post("/bulk_email_test_by_copy_paste", status_code=status.HTTP_201_CREATED)

@@ -1,11 +1,9 @@
-import asyncio
 import csv
-import io
 import logging
 import os
 import re
-import uuid
 from datetime import datetime, timezone
+from io import StringIO
 from typing import List
 
 from fastapi import HTTPException, UploadFile, status
@@ -23,9 +21,7 @@ from app.schemas.email import (
     CreditUsageBase,
     TestEmailBase,
 )
-from app.services.credit_service import CreditService
 from app.utils.mail_utils import (
-    analyze_email,
     evaluate_email_score_and_risk,
     get_mx_record,
     get_smtp_provider,
@@ -183,111 +179,100 @@ class EmailService:
                 detail="Database error occurred while testing email",
             )
 
-    async def process_bulk_email_file(self, file, user_id: str, db: Session):
-        file_contents = file.file.read().decode("utf-8")
-        csv_reader = csv.reader(io.StringIO(file_contents))
-        emails = [row[0].strip() for row in csv_reader if row]
+    async def validate_emails_from_csv(self, file_content: str, sender_email: str = "test@example.com"):
+        # Parse the CSV file content
+        csv_file = StringIO(file_content)
+        csv_reader = csv.reader(csv_file)
 
-        file_name = file.filename or "test_email.csv"
-        file_id = str(uuid.uuid4())
-        created_at = datetime.now(timezone.utc)
+        results = []
 
-        seen_emails = set()
-        duplicate_count = 0
-        valid_count = 0
-        total_count = 0
+        for row in csv_reader:
+            if not row:
+                continue  # Skip empty rows
 
-        bulk_email_objects = []
-        test_email_objects = []
+            # Assuming the email is in the first column
+            target_email = row[0].strip()
 
-        # Helper function for processing each email
-        async def process_email(email):
-            nonlocal duplicate_count, valid_count, total_count
+            if not target_email:
+                results.append({"email": target_email, "error": "No email provided"})
+                continue
 
-            total_count += 1
-            if email in seen_emails:
-                duplicate_count += 1
-                return None
-            seen_emails.add(email)
+            # Perform email validations
+            disposable_domains = load_disposable_domains()
+            is_syntax_valid = validate_email_syntax(target_email)
 
-            result = await analyze_email(email)
+            mx_record_result = get_mx_record(target_email)
+            mx_record = mx_record_result[0] if mx_record_result else None
+            implicit_mx = mx_record_result[1] if mx_record_result and len(mx_record_result) > 1 else None
 
-            # Prepare email data for database insertion
+            smtp_deliverable, smtp_reason, is_valid, validation_reason = perform_email_checks(
+                target_email=target_email, sender_email=sender_email, disposable_domains=disposable_domains
+            )
+
+            email_domain = target_email.split("@")[-1].lower()
+            is_disposable = int(email_domain in disposable_domains)
+
+            domain_name = target_email.split("@")[-1].split(".")[0]
+            match = re.search(r"@([\w\-]+)\.", target_email)
+            domain_name = match.group(1) if match else None
+
+            local_part = re.sub(r"[^a-zA-Z._-]", "", target_email.split("@")[0])
+            cleaned_name = re.sub(r"[\._-]+", " ", local_part).strip()
+            full_name = " ".join(part.capitalize() for part in cleaned_name.split())
+
+            email_str = target_email or ""
+            alphabetical_count = sum(c.isalpha() for c in email_str)
+            numerical_count = sum(c.isdigit() for c in email_str)
+            unicode_symbol_count = len(email_str) - alphabetical_count - numerical_count
+            email_str = target_email.lower()
+            has_role = any(role in email_str for role in ["admin", "info", "support", "sales", "contact"])
+            is_accept_all = "accept" in email_str or "all" in email_str
+            has_no_reply = "no-reply" in email_str or "noreply" in email_str
+
+            try:
+                _, domain = target_email.split("@")
+            except ValueError:
+                domain = ""
+
+            smtp_provider = get_smtp_provider(domain)
+
+            score, is_risky, tags = evaluate_email_score_and_risk(
+                is_syntax_valid=is_syntax_valid,
+                smtp_deliverable=smtp_deliverable,
+                is_disposable=bool(is_disposable),
+                has_role=has_role,
+                is_accept_all=is_accept_all,
+                has_no_reply=has_no_reply,
+                domain=email_domain,
+                mx_record=mx_record,
+                smtp_provider=smtp_provider,
+            )
+
             email_data = {
-                "user_id": user_id,
-                "full_name": result.get("full_name", "N/A"),
-                "domain": result.get("domain_name"),
-                "created_at": created_at,
-                "is_risky": result.get("is_risky"),
-                "soft_delete": False,
-                "is_valid": result.get("is_syntax_valid") and result.get("smtp_deliverable"),
-                "status": "valid" if result.get("is_syntax_valid") and result.get("smtp_deliverable") else "invalid",
-                "is_deliverable": result.get("smtp_deliverable"),
-                "reason": result.get("validation_reason") or result.get("smtp_reason"),
-                "is_disposable": result.get("is_disposable"),
-                "alphabetical_characters": result.get("alphabetical_count"),
-                "has_numerical_characters": result.get("numerical_count"),
-                "has_unicode_symbols": result.get("unicode_symbol_count"),
-                "smtp_provider": result.get("smtp_provider"),
-                "mx_record": result.get("mx_record", ""),
-                "implicit_mx_record": result.get("implicit_mx"),
-                "score": result.get("score"),
-                "has_role": result.get("has_role"),
-                "is_accept_all": result.get("is_accept_all"),
-                "has_no_reply": result.get("has_no_reply"),
-                "file_id": file_id,
-                "file_name": file_name,
-                "email_status": "processing",
+                "email": target_email,
+                "full_name": full_name or "N/A",
+                "domain": domain_name,
+                "is_risky": is_risky,
+                "is_valid": is_syntax_valid and smtp_deliverable,
+                "status": "valid" if is_syntax_valid and smtp_deliverable else "invalid",
+                "is_deliverable": smtp_deliverable,
+                "reason": validation_reason or smtp_reason,
+                "is_disposable": is_disposable,
+                "alphabetical_characters": alphabetical_count,
+                "has_numerical_characters": numerical_count,
+                "has_unicode_symbols": unicode_symbol_count,
+                "smtp_provider": smtp_provider,
+                "mx_record": mx_record or "",
+                "implicit_mx_record": implicit_mx,
+                "score": score,
+                "has_role": has_role,
+                "is_accept_all": is_accept_all,
+                "has_no_reply": has_no_reply,
             }
 
-            # Append email data to the bulk list
-            bulk_email_objects.append(TestEmail(**email_data))
+            results.append(email_data)
 
-            # Add to test emails if the file name is 'test_email.csv'
-            if file_name == "test_email.csv":
-                test_email_objects.append(BulkEmailStats(**email_data))
-
-            if email_data["is_valid"]:
-                valid_count += 1
-
-        # Concurrently process emails using asyncio.gather()
-        tasks = [process_email(email) for email in emails]
-        await asyncio.gather(*tasks)
-
-        # Store all email data in the DB
-        db.bulk_save_objects(bulk_email_objects)
-        if test_email_objects:
-            db.bulk_save_objects(test_email_objects)
-
-        # Store bulk upload summary (metadata) in BulkEmailStats table
-        bulk_email_summary = {
-            "user_id": user_id,
-            "file_id": file_id,
-            "file_name": file_name,
-            "total": total_count,
-            "duplicate_email": duplicate_count,
-            "total_valid_emails": valid_count,
-            "email_status": "completed",
-            "created_at": created_at,
-        }
-        db.add(BulkEmailStats(**bulk_email_summary))
-
-        # Update credits for valid emails only
-        if valid_count:
-            credit_service = CreditService()
-            credit_service.decrement_credits(db, user_id=user_id, amount=valid_count)
-
-        db.commit()
-
-        return {
-            "file_id": file_id,
-            "file_name": file_name,
-            "total": total_count,
-            "duplicate_email": duplicate_count,
-            "total_valid_emails": valid_count,
-            "email_status": "completed",
-            "created_at": created_at,
-        }
+        return results
 
     def get_test_email(self, test_email_id: int):
         test_email = (

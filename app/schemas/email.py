@@ -12,7 +12,6 @@ class UserBase(BaseModel):
 
 class BulkEmailStatsBase(BaseModel):
     file_name: str
-    # user_tested_email: Optional[str] = None  # Added can be None for testing purposes
     duplicate_email: int
     total_valid_emails: int
     status: Optional[str] = None  # Added can be None for testing purposes
@@ -140,8 +139,8 @@ class BulkEmailStatsCreate(BulkEmailStatsBase):
     user_id: str  # Make user_id required for creation
 
 
-# class TestEmailCreate(TestEmailBase):
-#     file_id: Optional[int] = None
+class TestEmailCreate(TestEmailBase):
+    file_id: Optional[int] = None
 
 
 # Models for reading data (response bodies)
