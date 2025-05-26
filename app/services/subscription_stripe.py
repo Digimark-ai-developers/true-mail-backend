@@ -15,8 +15,8 @@ load_dotenv()
 # YOUR_DOMAIN = os.getenv("FRONTEND_DOMAIN")
 
 stripe.api_key = "sk_test_51PY76e2MGeqNp340z0BavRh70aMrc5NqSmof5lIAXPzSfgpPBWOUg5YQo8ICUmHyXZhmFDogyklDoG90gmuEFcw400JIZnaQiI"
-endpoint_secret = "whsec_282f3a4ad56bc05adbeaa907b181be408135945a8f6c3286a7b75fc9c2bf677f"
-YOUR_DOMAIN = "http://127.0.0.1:8002"
+endpoint_secret = "whsec_k05E5GLSADRVJfvI7JdSAg4LtBFGMYyV"
+YOUR_DOMAIN = "http://127.0.0.1:5173"
 
 
 class PaymentService:
