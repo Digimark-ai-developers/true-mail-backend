@@ -168,11 +168,13 @@ def auth_google(code: str, db: Session = Depends(get_db)):
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
+
 @router.get("/login_github")
 def login_github():
     auth_service = AuthService(None)  # no DB needed here
     return {"url": auth_service.get_github_oauth_url()}
+
 
 @router.get("/github")
 def auth_github(code: str, db: Session = Depends(get_db)):
@@ -187,8 +189,6 @@ def auth_github(code: str, db: Session = Depends(get_db)):
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-
 
 
 @router.post("/forgot_password")
@@ -217,7 +217,6 @@ def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db
         raise e
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-
 
 
 @router.post("/change_password")

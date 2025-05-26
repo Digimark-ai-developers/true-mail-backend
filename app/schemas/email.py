@@ -88,7 +88,6 @@ class TestEmailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)  # Pydantic v2 replacement for orm_mode=True
 
 
-
 class TestEmailResponseWrapper(BaseModel):
     message: str
     status: int

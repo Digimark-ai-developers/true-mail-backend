@@ -27,6 +27,7 @@ GITHUB_REDIRECT_URI = os.getenv("GITHUB_REDIRECT_URI")
 # GITHUB_REDIRECT_URI = "https://true-mail-backend.vercel.app/auth/github"
 print("Github Redirect URI", GITHUB_REDIRECT_URI, "GITHUB_CLIENT_ID", GITHUB_CLIENT_ID, "github client secret", GITHUB_CLIENT_SECRET)
 
+
 class AuthService:
     def __init__(self, db: Session):
         self.db = db
@@ -203,10 +204,7 @@ class AuthService:
 
     def get_github_oauth_url(self):
         return (
-            f"https://github.com/login/oauth/authorize"
-            f"?client_id={GITHUB_CLIENT_ID}"
-            f"&redirect_uri={GITHUB_REDIRECT_URI}"
-            f"&scope=user:email"
+            f"https://github.com/login/oauth/authorize" f"?client_id={GITHUB_CLIENT_ID}" f"&redirect_uri={GITHUB_REDIRECT_URI}" f"&scope=user:email"
         )
 
     def exchange_code_for_github_token(self, code: str):
@@ -232,10 +230,7 @@ class AuthService:
             raise HTTPException(status_code=400, detail="No access token received")
 
         # Fetch user info from GitHub
-        user_info_response = requests.get(
-            "https://api.github.com/user",
-            headers={"Authorization": f"token {access_token}"}
-        )
+        user_info_response = requests.get("https://api.github.com/user", headers={"Authorization": f"token {access_token}"})
         if user_info_response.status_code != 200:
             raise HTTPException(status_code=400, detail="Failed to fetch GitHub user info")
 
@@ -243,26 +238,19 @@ class AuthService:
 
         # Optional: fetch email (separate endpoint if email is not public)
         if not user_info.get("email"):
-            emails_response = requests.get(
-                "https://api.github.com/user/emails",
-                headers={"Authorization": f"token {access_token}"}
-            )
+            emails_response = requests.get("https://api.github.com/user/emails", headers={"Authorization": f"token {access_token}"})
             if emails_response.status_code == 200:
                 primary_email = next((email["email"] for email in emails_response.json() if email["primary"]), None)
                 user_info["email"] = primary_email
 
         # GitHub doesn't return an ID token, so you'll use access_token in Firebase login
         return user_info, access_token
-    
+
     def login_with_github_access_token(self, access_token: str, provider_id="github.com") -> tuple[str, str]:
         firebase_api_key = os.getenv("FIREBASE_API_KEY")
         url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={firebase_api_key}"
 
-        payload = {
-            "postBody": f"access_token={access_token}&providerId={provider_id}",
-            "requestUri": GITHUB_REDIRECT_URI,
-            "returnSecureToken": True
-        }
+        payload = {"postBody": f"access_token={access_token}&providerId={provider_id}", "requestUri": GITHUB_REDIRECT_URI, "returnSecureToken": True}
 
         response = requests.post(url, json=payload)
         if response.status_code != 200:
@@ -271,9 +259,6 @@ class AuthService:
 
         data = response.json()
         return data["idToken"], data["localId"]
-
-
-
 
     def send_password_reset_email(self, email: str):
         try:

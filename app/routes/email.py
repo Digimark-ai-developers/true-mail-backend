@@ -8,7 +8,6 @@ from fastapi import (
     UploadFile,
     status,
 )
-from typing import Annotated  # Optional
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -36,7 +35,7 @@ from app.schemas.email import (  # Import your Pydantic models
 from app.schemas.user import UserInfo
 from app.utils.jwt_handler import get_current_user
 from app.services.email_service import EmailService
-from app.utils.mail_utils import check_email_reachability, load_disposable_domains
+from app.utils.mail_utils import load_disposable_domains
 
 
 router = APIRouter(prefix="/email", tags=["Email Validation Functions"])
@@ -46,9 +45,7 @@ DISPOSABLE_DOMAINS = load_disposable_domains()
 
 
 @router.post("/test_single_email", response_model=TestEmailWrapper)
-async def create_single_email(
-    test_email: TestEmailBase, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)
-):
+async def create_single_email(test_email: SimpleEmailCheckRequest, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
     service = EmailService(db)
     email = await service.create_test_email(user.user_Id, test_email)
 
@@ -57,6 +54,7 @@ async def create_single_email(
         status=status.HTTP_201_CREATED,
         data=TestEmailBase.model_validate(email),
     )
+
 
 @router.get("/test_single_email/{test_email_id}", response_model=TestEmailResponseWrapper)
 def get_single_test_email(test_email_id: int, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
@@ -81,8 +79,6 @@ def get_single_test_email(test_email_id: int, db: Session = Depends(get_db), use
     return TestEmailResponseWrapper(
         message="Test email found successfully.", status=status.HTTP_302_FOUND, data=TestEmailResponse.model_validate(test_email)
     )
-
-
 
 
 @router.get("/recent_tested_emails", response_model=AllTestEmaislOrderedByCreationTime)
