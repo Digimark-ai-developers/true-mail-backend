@@ -32,7 +32,6 @@ async def get_logged_in_user(user: UserID = Depends(get_current_user)):
 
         HTTPException: 401 if user is not authenticated.
     """
-    print(user.user_Id)
     return user
 
 

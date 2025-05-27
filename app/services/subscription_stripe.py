@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import uuid
 from fastapi import HTTPException
 import stripe
@@ -16,6 +16,8 @@ load_dotenv()
 
 stripe.api_key = "sk_test_51PY76e2MGeqNp340z0BavRh70aMrc5NqSmof5lIAXPzSfgpPBWOUg5YQo8ICUmHyXZhmFDogyklDoG90gmuEFcw400JIZnaQiI"
 endpoint_secret = "whsec_k05E5GLSADRVJfvI7JdSAg4LtBFGMYyV"
+# endpoint_secret = "whsec_282f3a4ad56bc05adbeaa907b181be408135945a8f6c3286a7b75fc9c2bf677f"
+
 YOUR_DOMAIN = "http://127.0.0.1:5173"
 
 
@@ -61,7 +63,7 @@ class PaymentService:
             event_type = event["type"]
             data_object = event["data"]["object"]
 
-            if event_type in ["checkout.session.completed", "charge.updated"]:
+            if event_type in ["checkout.session.completed"]:
                 self._handle_successful_checkout(data_object)
 
             elif event_type == "invoice.payment_failed":
@@ -78,6 +80,7 @@ class PaymentService:
 
     def _handle_successful_checkout(self, data_object):
         user_id = data_object.get("metadata", {}).get("user_id")
+
         credits = int(data_object.get("metadata", {}).get("credits", 0))
         # email = data_object.get("customer_email")
         amount_total = data_object.get("amount_total")
@@ -91,14 +94,14 @@ class PaymentService:
         existing_credit.is_paid = True
         existing_credit.total_credits += credits
         existing_credit.remaining_credits += credits
-        existing_credit.last_updated = datetime.now(timezone.utc)
-        existing_credit.expires_at = datetime.now(timezone.utc) + timedelta(days=730)
+        existing_credit.last_updated = datetime.now()
+        existing_credit.expires_at = datetime.now() + timedelta(days=730)
 
         new_credit_history = CreditHistory(
             user_id=user_id,
             credits_purchased=credits,
             amount=amount_total,
-            purchased_at=datetime.now(timezone.utc),
+            purchased_at=datetime.now(),
         )
 
         new_invoice = Invoices(
@@ -106,7 +109,7 @@ class PaymentService:
             amount=amount_total,
             number=number,
             status=True,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(),
         )
 
         self.db.add(new_credit_history)

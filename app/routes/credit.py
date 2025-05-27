@@ -10,6 +10,7 @@ from app.schemas.credit import (
     CreditBalanceResponseWrapper,
     CreditHistoryResponseWrapper,
     CreditUsageResponseWrapper,
+    JustCreditBalanceRespone,
 )
 
 
@@ -19,31 +20,13 @@ router = APIRouter(prefix="/credits", tags=["Credits"])
 @router.get("/balance", summary="Get current credit balance", response_model=CreditBalanceResponseWrapper)
 def get_credit_balance(user: UserID = Depends(get_current_user), db: Session = Depends(get_db)):
     """
-    Retrieve the current credit balance for the authenticated user.
-
-    Args:
-
-        user (UserID): The authenticated user's ID extracted from the JWT token.
-
-    Returns:
-
-        CreditBalanceResponseWrapper: Wrapped response containing current credit balance.
-
-    Example:
-
-        {
-            "status": 200,
-            "message": "Credit balance read successfully",
-            "data": {
-                "total_credits": 1000,
-                "used_credits": 150,
-                "remaining_credits": 850
-            }
-        }
+    Retrieve only the remaining credit balance for the authenticated user.
     """
     service = CreditService(db)
-    credit_data = service.fetch_credit_balance(user.user_Id)
-    return CreditBalanceResponseWrapper(message="Credit balance read successfully", status=status.HTTP_200_OK, data=credit_data)
+    remaining = service.fetch_credit_balance(user.user_Id)
+    return CreditBalanceResponseWrapper(
+        message="Credit balance read successfully", status=status.HTTP_200_OK, data=JustCreditBalanceRespone(remaining_credits=remaining)
+    )
 
 
 @router.get("/usage", summary="Get all credit usage for user", response_model=CreditUsageResponseWrapper)

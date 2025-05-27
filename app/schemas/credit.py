@@ -14,10 +14,14 @@ class CreditBalanceResponse(BaseModel):
     model_config = {"from_attributes": True}  # <- this replaces orm_mode = True in Pydantic v2
 
 
+class JustCreditBalanceRespone(BaseModel):
+    remaining_credits: int
+
+
 class CreditBalanceResponseWrapper(BaseModel):
     message: str
     status: int
-    data: CreditBalanceResponse
+    data: JustCreditBalanceRespone
 
 
 class CreditUsageResponse(BaseModel):

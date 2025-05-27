@@ -25,7 +25,6 @@ GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 GITHUB_REDIRECT_URI = os.getenv("GITHUB_REDIRECT_URI")
 # GITHUB_REDIRECT_URI = "https://true-mail-backend.vercel.app/auth/github"
-print("Github Redirect URI", GITHUB_REDIRECT_URI, "GITHUB_CLIENT_ID", GITHUB_CLIENT_ID, "github client secret", GITHUB_CLIENT_SECRET)
 
 
 class AuthService:
@@ -87,7 +86,18 @@ class AuthService:
             print(e)
             raise e  # just re-raise the exception
 
-    def login_with_email_password(self, email: str, password: str) -> User:
+    def login_with_email_password(self, email: str, password: str) -> str:
+        # Step 1: Check if user exists in Firebase
+        try:
+            firebase_user = firebase_auth.get_user_by_email(email)
+        except UserNotFoundError:
+            raise HTTPException(status_code=404, detail="User does not exist. Please register first.")
+
+        # Step 2: Check if email is verified
+        if not firebase_user.email_verified:
+            raise HTTPException(status_code=403, detail="Email is not verified")
+
+        # Step 3: Proceed to login with email/password
         fire_base_api_key = os.getenv("FIREBASE_API_KEY")
         url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={fire_base_api_key}"
 
@@ -102,9 +112,7 @@ class AuthService:
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         data = response.json()
-        id_token = data["idToken"]
-
-        return id_token
+        return data["idToken"]
 
     def get_google_oauth_url(self):
 
@@ -176,11 +184,6 @@ class AuthService:
             self.db.add(user)
             self.db.commit()
             self.db.refresh(user)
-        else:
-            # Optionally update firebase_uid if changed
-            if firebase_uid and user.user_id != firebase_uid:
-                user.user_id = firebase_uid
-                self.db.commit()
 
         return user
 
@@ -211,7 +214,6 @@ class AuthService:
         )
 
     def exchange_code_for_github_token(self, code: str):
-        print("inside github token exchange")
         token_url = "https://github.com/login/oauth/access_token"
         headers = {"Accept": "application/json"}
         data = {
@@ -222,7 +224,6 @@ class AuthService:
         }
 
         response = requests.post(token_url, headers=headers, data=data)
-        print("GitHub token response:", response.text)
 
         if response.status_code != 200:
             raise HTTPException(status_code=400, detail="Failed to exchange code for token")
