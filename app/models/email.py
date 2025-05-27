@@ -25,6 +25,7 @@ class BulkEmailStats(Base):
     status = Column(String)
     deliverable = Column(Float)
     total = Column(Integer)
+    risky = Column(Integer)
     soft_delete = Column(Boolean)
     created_at = Column(DateTime)
     soft_delete = Column(Boolean)

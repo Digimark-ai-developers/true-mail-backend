@@ -26,6 +26,9 @@ GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 GITHUB_REDIRECT_URI = os.getenv("GITHUB_REDIRECT_URI")
 # GITHUB_REDIRECT_URI = "https://true-mail-backend.vercel.app/auth/github"
 
+FACEBOOK_CLIENT_ID = "419750910829026"
+FACEBOOK_CLIENT_SECRET = "59bd71e6ac017a07faa3b22f44d8a2b6"
+FACEBOOK_REDIRECT_URI = "http://localhost:8000/auth/facebook"
 
 class AuthService:
     def __init__(self, db: Session):
@@ -157,6 +160,32 @@ class AuthService:
 
         return user_info, id_token
 
+    def exchange_code_for_facebook_token(self, code: str):
+        token_url = "https://graph.facebook.com/v19.0/oauth/access_token"
+        data = {
+            "client_id": FACEBOOK_CLIENT_ID,
+            "client_secret": FACEBOOK_CLIENT_SECRET,
+            "code": code,
+            "redirect_uri": FACEBOOK_REDIRECT_URI,
+        }
+
+        response = requests.get(token_url, params=data)
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to exchange code for token")
+
+        tokens = response.json()
+        access_token = tokens.get("access_token")
+        if not access_token:
+            raise HTTPException(status_code=400, detail="No access token received")
+
+        # Get user info
+        user_info_url = "https://graph.facebook.com/me?fields=id,name,email"
+        user_info_response = requests.get(user_info_url, params={"access_token": access_token})
+        if user_info_response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch Facebook user info")
+
+        return user_info_response.json(), access_token
+
     def get_or_create_user(self, user_info: dict, firebase_uid: str = None):
         email = user_info.get("email")
         name = user_info.get("name")
@@ -186,6 +215,14 @@ class AuthService:
             self.db.refresh(user)
 
         return user
+    def get_facebook_oauth_url(self):
+        return (
+            f"https://www.facebook.com/v19.0/dialog/oauth"
+            f"?client_id={FACEBOOK_CLIENT_ID}"
+            f"&redirect_uri={FACEBOOK_REDIRECT_URI}"
+            f"&scope=email"
+            f"&response_type=code"
+        )
 
     def get_user_info(self, access_token: str):
         user_info_url = "https://www.googleapis.com/oauth2/v1/userinfo"

@@ -167,7 +167,32 @@ def auth_google(code: str, db: Session = Depends(get_db)):
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+@router.get("/login_facebook")
+def login_facebook(db: Session = Depends(get_db)):
+    """
+    Generate the Facebook OAuth 2.0 login URL for user authentication.
 
+    Args:
+        db (Session): SQLAlchemy session used to access the database.
+
+    Returns:
+        dict: Contains the Facebook OAuth URL to initiate login via frontend.
+    """
+    auth_service = AuthService(db)
+    return {"url": auth_service.get_facebook_oauth_url()}
+
+@router.get("/facebook")
+def auth_facebook(code: str, db: Session = Depends(get_db)):
+    try:
+        auth_service = AuthService(db)
+        user_info, fb_access_token = auth_service.exchange_code_for_facebook_token(code)
+        firebase_id_token, firebase_uid = auth_service.login_with_google_user_info(fb_access_token, provider_id="facebook.com")
+        auth_service.get_or_create_user(user_info, firebase_uid=firebase_uid)
+
+        params = urlencode({"token": firebase_id_token})
+        return RedirectResponse(f"https://your-frontend-url/home?{params}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/login_github")
 def login_github():

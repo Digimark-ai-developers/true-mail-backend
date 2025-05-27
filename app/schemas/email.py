@@ -201,7 +201,14 @@ class BulkEmailStatsResponseWithEmails(BaseModel):
     user_id: str
     file_id: int
     file_name: str
-    test_emails: list[str]
+    test_emails: list[TestEmailBase]
+
+class BulkEmailResponseWrapper(BaseModel):
+    message: str
+    status: int
+    task_id: Optional[str] = None
+    data: Optional[BulkEmailStatsResponseWithEmails] = None
+
 
 
 class FileStats(BaseModel):
