@@ -1,16 +1,7 @@
 # app\routes\email.py
 
 
-from fastapi import (
-    APIRouter,
-    Body,
-    Depends,
-    File,
-    HTTPException,
-    Query,
-    UploadFile,
-    status,
-)
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -93,6 +84,8 @@ async def upload_bulk_email_file(
             file_content = contents.decode("utf-8")
 
             service = EmailService(db)
+
+            # ✅ Use `user.id` instead of `user.user_id`
             result = await service.validate_emails_from_csv(user.user_Id, file_content, file.filename)
 
             return JSONResponse(
@@ -110,23 +103,31 @@ async def upload_bulk_email_file(
     else:
         raise HTTPException(status_code=400, detail="File type not supported. Please upload a CSV file.")
 
+    # new route copy past
 
-@router.post("/bulk_email_test_by_copy_paste", status_code=status.HTTP_201_CREATED)
-def create_bulk_email_by_copy_paste(
-    payload: BulkEmailStatsCreateWithEmails = Body(),
+
+@router.post(
+    "/bulk_email_test_copy_past",
+    summary="Validate multiple emails at once Copy / Past",
+    response_model=BulkEmailStatsCreateWithEmails,
+)
+async def validate_multiple_emails(
+    payload: BulkEmailStatsCreateWithEmails,
     db: Session = Depends(get_db),
     user: UserInfo = Depends(get_current_user),
 ):
     service = EmailService(db)
-    result = service.create_bulk_email_with_copy_paste(payload, user.user_Id)  # type: ignore
+    result = await service.validate_emails(user_id=user.user_Id, emails=payload.test_emails)
 
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
-        content={
-            "message": "Bulk emails created successfully from copy/paste",
-            "Status_Code": status.HTTP_201_CREATED,
-            "data": result.dict(),
-        },
+        content=jsonable_encoder(
+            {
+                "message": "Emails validated successfully",
+                "Status_Code": status.HTTP_201_CREATED,
+                "data": result,
+            }
+        ),
     )
 
 
