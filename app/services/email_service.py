@@ -2,7 +2,7 @@ import re
 from datetime import datetime, timezone
 import os
 from typing import List
-from fastapi import HTTPException, UploadFile, logger, status
+from fastapi import HTTPException, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -24,153 +24,142 @@ from app.utils.mail_utils import (
     perform_email_checks,
     validate_email_syntax,
 )
+from app.utils.cache import test_email_status_cache
 
 
 class EmailService:
     def __init__(self, db: Session):
         self.db = db
 
-    async def create_test_email(self, user_id: str, test_email: SimpleEmailCheckRequest, sender_email: str = "test@example.com"):
-        # Step 1: Validate User
-        user = self.db.query(User).filter(User.user_id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=400, detail="User ID not found")
-
-        # Step 2: Check and Deduct Credits
-        credit = self.db.query(Credit).filter(Credit.user_id == user_id).first()
-        if not credit or credit.remaining_credits < 1:
-            raise HTTPException(status_code=403, detail="Insufficient credits to test email")
-
-        credit.remaining_credits -= 1
-        credit.total_credits -= 1
-        credit.last_updated = datetime.utcnow()
-        self.db.add(credit)
-
-        # Step 3: Email Validations
-        target_email = test_email.user_tested_email
-        if not target_email:
-            raise HTTPException(status_code=400, detail="No email provided to validate.")
-
-        disposable_domains = load_disposable_domains()
-        is_syntax_valid = validate_email_syntax(target_email)
-
-        # Step 4: Safely Handle MX Record
-        mx_record_result = get_mx_record(target_email)
-        mx_record = mx_record_result[0] if mx_record_result else None
-        implicit_mx = mx_record_result[1] if mx_record_result and len(mx_record_result) > 1 else None
-
-        # Step 5: Run consolidated email checks
-        smtp_deliverable, smtp_reason, is_valid, validation_reason = perform_email_checks(
-            target_email=target_email, sender_email=sender_email, disposable_domains=disposable_domains
-        )
-
-        email_domain = target_email.split("@")[-1].lower()
-        is_disposable = int(email_domain in disposable_domains)
-
-        email_domain = target_email.split("@")[-1].lower()
-        # is_deliverable = int(email_domain in disposable_domains)
-
-        # Extract domain part (e.g., "gmail" from "test@gmail.com")
-        domain_name = target_email.split("@")[-1].split(".")[0]
-        match = re.search(r"@([\w\-]+)\.", target_email)
-        domain_name = match.group(1) if match else None
-        # Extract domain and name from email
-
-        local_part = re.sub(r"[^a-zA-Z._-]", "", target_email.split("@")[0])  # Remove numbers/symbols except separators
-        cleaned_name = re.sub(r"[\._-]+", " ", local_part).strip()  # Replace _, ., - with space
-        full_name = " ".join(part.capitalize() for part in cleaned_name.split())
-
-        # Step 5.1: Analyze email string
-        email_str = target_email or ""
-        alphabetical_count = sum(c.isalpha() for c in email_str)
-        numerical_count = sum(c.isdigit() for c in email_str)
-        unicode_symbol_count = len(email_str) - alphabetical_count - numerical_count
-        email_str = target_email.lower()
-        has_role = any(role in email_str for role in ["admin", "info", "support", "sales", "contact"])
-        is_accept_all = "accept" in email_str or "all" in email_str
-        has_no_reply = "no-reply" in email_str or "noreply" in email_str
-
-        # Extract domain for smtp_provider detection
+    async def create_test_email(self, user_id: str, test_email: SimpleEmailCheckRequest, test_id: str, sender_email: str = "test@example.com"):
         try:
-            _, domain = target_email.split("@")
-        except ValueError:
-            domain = ""
+            # Validate User
+            user = self.db.query(User).filter(User.user_id == user_id).first()
+            if not user:
+                raise HTTPException(status_code=400, detail="User ID not found")
 
-        smtp_provider = get_smtp_provider(domain)
+            # Deduct credits
+            credit = self.db.query(Credit).filter(Credit.user_id == user_id).first()
+            if not credit or credit.remaining_credits < 1:
+                raise HTTPException(status_code=403, detail="Insufficient credits to test email")
 
-        # Refined score & risk evaluation
-        score, is_risky, tags = evaluate_email_score_and_risk(
-            is_syntax_valid=is_syntax_valid,
-            smtp_deliverable=smtp_deliverable,
-            is_disposable=bool(is_disposable),
-            has_role=has_role,
-            is_accept_all=is_accept_all,
-            has_no_reply=has_no_reply,
-            domain=email_domain,
-            mx_record=mx_record,
-            smtp_provider=smtp_provider,
-        )
+            credit.remaining_credits -= 1
+            credit.total_credits -= 1
+            credit.last_updated = datetime.utcnow()
+            self.db.add(credit)
 
-        # Step 6: Prepare data dictionary with overrides
-        email_data = test_email.model_dump()
-        email_data.update(
-            {
-                # "status": "valid" if is_valid else "invalid",
-                # "is_deliverable": is_deliverable,
-                # "implicit_mx_record": implicit_mx,
-                # "mx_record": mx_record,
-                "user_id": user_id,
-                "full_name": full_name or "N/A",
-                "domain": domain_name,
-                "created_at": datetime.now(timezone.utc),
-                "is_risky": is_risky,
-                "soft_delete": False,
-                "is_valid": is_syntax_valid and smtp_deliverable,
-                "status": "valid" if is_syntax_valid and smtp_deliverable else "invalid",
-                "is_deliverable": smtp_deliverable,
-                "reason": validation_reason or smtp_reason,
-                "is_disposable": is_disposable,
-                "alphabetical_characters": alphabetical_count,
-                "has_numerical_characters": numerical_count,
-                "has_unicode_symbols": unicode_symbol_count,
-                "smtp_provider": smtp_provider,
-                "mx_record": mx_record or "",
-                "implicit_mx_record": implicit_mx,
-                "score": score,
-                "has_role": has_role,
-                "is_accept_all": is_accept_all,
-                "has_no_reply": has_no_reply,
-            }
-        )
+            # Validate email
+            target_email = test_email.user_tested_email
+            if not target_email:
+                raise HTTPException(status_code=400, detail="No email provided to validate.")
 
-        # Step 7: Create DB record
-        db_test_email = TestEmail(**email_data)
-        self.db.add(db_test_email)
-        self.db.commit()
-        self.db.refresh(db_test_email)
+            disposable_domains = load_disposable_domains()
+            is_syntax_valid = validate_email_syntax(target_email)
+            mx_record_result = get_mx_record(target_email)
+            mx_record = mx_record_result[0] if mx_record_result else None
+            implicit_mx = mx_record_result[1] if mx_record_result and len(mx_record_result) > 1 else None
 
-        # Step 8: Record credit usage
-        credit_used = CreditUsageBase(
-            user_id=user_id,
-            email_or_file_id=db_test_email.id,
-            quantity_used=1,
-            credits_used=1,
-            created_at=datetime.now(timezone.utc),
-        )
-        db_credit_used = CreditUsage(**credit_used.model_dump())
-        self.db.add(db_credit_used)
+            smtp_deliverable, smtp_reason, is_valid, validation_reason = perform_email_checks(
+                target_email=target_email, sender_email=sender_email, disposable_domains=disposable_domains
+            )
 
-        try:
+            email_domain = target_email.split("@")[-1].lower()
+            is_disposable = int(email_domain in disposable_domains)
+
+            match = re.search(r"@([\w\-]+)\.", target_email)
+            domain_name = match.group(1) if match else None
+
+            local_part = re.sub(r"[^a-zA-Z._-]", "", target_email.split("@")[0])
+            cleaned_name = re.sub(r"[\._-]+", " ", local_part).strip()
+            full_name = " ".join(part.capitalize() for part in cleaned_name.split())
+
+            email_str = target_email.lower()
+            alphabetical_count = sum(c.isalpha() for c in email_str)
+            numerical_count = sum(c.isdigit() for c in email_str)
+            unicode_symbol_count = len(email_str) - alphabetical_count - numerical_count
+
+            has_role = any(role in email_str for role in ["admin", "info", "support", "sales", "contact"])
+            is_accept_all = "accept" in email_str or "all" in email_str
+            has_no_reply = "no-reply" in email_str or "noreply" in email_str
+
+            try:
+                _, domain = target_email.split("@")
+            except ValueError:
+                domain = ""
+
+            smtp_provider = get_smtp_provider(domain)
+
+            score, is_risky, tags = evaluate_email_score_and_risk(
+                is_syntax_valid=is_syntax_valid,
+                smtp_deliverable=smtp_deliverable,
+                is_disposable=bool(is_disposable),
+                has_role=has_role,
+                is_accept_all=is_accept_all,
+                has_no_reply=has_no_reply,
+                domain=email_domain,
+                mx_record=mx_record,
+                smtp_provider=smtp_provider,
+            )
+
+            email_data = test_email.model_dump()
+            email_data.update(
+                {
+                    "user_id": user_id,
+                    "full_name": full_name or "N/A",
+                    "domain": domain_name,
+                    "created_at": datetime.now(timezone.utc),
+                    "is_risky": is_risky,
+                    "soft_delete": False,
+                    "is_valid": is_syntax_valid and smtp_deliverable,
+                    "status": "valid" if is_syntax_valid and smtp_deliverable else "invalid",
+                    "is_deliverable": smtp_deliverable,
+                    "reason": validation_reason or smtp_reason,
+                    "is_disposable": is_disposable,
+                    "alphabetical_characters": alphabetical_count,
+                    "has_numerical_characters": numerical_count,
+                    "has_unicode_symbols": unicode_symbol_count,
+                    "smtp_provider": smtp_provider,
+                    "mx_record": mx_record or "",
+                    "implicit_mx_record": implicit_mx,
+                    "score": score,
+                    "has_role": has_role,
+                    "is_accept_all": is_accept_all,
+                    "has_no_reply": has_no_reply,
+                }
+            )
+
+            db_test_email = TestEmail(**email_data)
+            self.db.add(db_test_email)
             self.db.commit()
             self.db.refresh(db_test_email)
-            return db_test_email
-        except IntegrityError:
-            self.db.rollback()
-            logger.exception("Database error during create_test_email.")
-            raise HTTPException(
-                status_code=500,
-                detail="Database error occurred while testing email",
+
+            credit_used = CreditUsageBase(
+                user_id=user_id,
+                email_or_file_id=db_test_email.id,
+                quantity_used=1,
+                credits_used=1,
+                created_at=datetime.now(timezone.utc),
             )
+            db_credit_used = CreditUsage(**credit_used.model_dump())
+            self.db.add(db_credit_used)
+
+            self.db.commit()
+            self.db.refresh(db_test_email)
+
+            # Mark task as completed
+            test_email_status_cache[test_id] = {
+                "status": "completed",
+                "email_id": db_test_email.id,
+                "message": "Test completed",
+            }
+
+        except Exception as e:
+            self.db.rollback()
+            test_email_status_cache[test_id] = {
+                "status": "failed",
+                "error": str(e),
+            }
+            raise
 
     def get_test_email(self, test_email_id: int, user_id: str):
         test_email = (

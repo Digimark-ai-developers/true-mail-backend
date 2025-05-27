@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from app.schemas.auth import UserID
 
 
-
 router = APIRouter(prefix="/stripe", tags=["Stripe"])
 
 
@@ -31,13 +30,7 @@ async def create_session(
         dict: Contains a success message, status code, and the Stripe checkout URL.
     """
     service = PaymentService(db)
-    checkout_url = service.create_checkout_session(
-        user.email,
-        data.success_url,  # success_url
-        data.card_price,
-        data.credits,
-        user.user_Id
-    )
+    checkout_url = service.create_checkout_session(user.email, data.success_url, data.card_price, data.credits, user.user_Id)  # success_url
     return {
         "message": "Stripe checkout session created successfully.",
         "status_code": status.HTTP_200_OK,

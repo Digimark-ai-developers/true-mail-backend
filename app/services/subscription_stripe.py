@@ -23,7 +23,7 @@ class PaymentService:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_checkout_session(self, email: str, success_url: str, card_price: int, credits: int,user_id: str):
+    def create_checkout_session(self, email: str, success_url: str, card_price: int, credits: int, user_id: str):
         try:
             session = stripe.checkout.Session.create(
                 payment_method_types=["card"],
@@ -33,14 +33,10 @@ class PaymentService:
                 line_items=[
                     {
                         "price_data": {
-                        "currency": "usd",
-                        "product_data": {
-                            "name": "Credit Purchase",
-                            "description": f"{credits} credits package"
+                            "currency": "usd",
+                            "product_data": {"name": "Credit Purchase", "description": f"{credits} credits package"},
+                            "unit_amount": card_price,
                         },
-                        "unit_amount": card_price,
-                    },
-
                         "quantity": 1,
                     }
                 ],
@@ -125,5 +121,5 @@ class PaymentService:
             self.db.commit()
 
     def get_invoices(self, user_id: str):
-        invoices = self.db.query(Invoices).filter(Invoices.user_id == user_id).all()
+        invoices = self.db.query(Invoices).filter(Invoices.user_id == user_id).order_by(Invoices.created_at.desc()).all()
         return invoices

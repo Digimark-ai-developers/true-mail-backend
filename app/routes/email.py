@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 # from app.utils.email_tools import check_email_reachability, validate_email_syntax
 from app.database.db_config import get_db
+from app.models.email import TestEmail
 from app.schemas.auth import UserID
 from app.schemas.email import (
     AllTestEmailsByFileResponseWrapper,
@@ -22,7 +23,6 @@ from app.schemas.email import (
     FileStatsResponse,
     FileStatsResponseWrapper,
     SimpleEmailCheckRequest,
-    TestEmailBase,
     TestEmailResponse,
     TestEmailResponseWrapper,
     TestEmailWrapper,
@@ -36,6 +36,9 @@ from app.schemas.user import UserInfo
 from app.utils.jwt_handler import get_current_user
 from app.services.email_service import EmailService
 from app.utils.mail_utils import load_disposable_domains
+from fastapi import BackgroundTasks
+import uuid
+from app.utils.cache import test_email_status_cache
 
 
 router = APIRouter(prefix="/email", tags=["Email Validation Functions"])
@@ -45,15 +48,44 @@ DISPOSABLE_DOMAINS = load_disposable_domains()
 
 
 @router.post("/test_single_email", response_model=TestEmailWrapper)
-async def create_single_email(test_email: SimpleEmailCheckRequest, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
+async def create_single_email(
+    test_email: SimpleEmailCheckRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    user: UserID = Depends(get_current_user),
+):
+    test_id = str(uuid.uuid4())
+    test_email_status_cache[test_id] = {"status": "processing"}
+
     service = EmailService(db)
-    email = await service.create_test_email(user.user_Id, test_email)
+    background_tasks.add_task(service.create_test_email, user.user_Id, test_email, test_id)
 
     return TestEmailWrapper(
-        message="Email tested successfully.",
-        status=status.HTTP_201_CREATED,
-        data=TestEmailBase.model_validate(email),
+        message="Email test started. Check back shortly.",
+        status=status.HTTP_202_ACCEPTED,
+        test_id=test_id,
     )
+
+
+@router.get("/test_single_email_status/{test_id}", response_model=TestEmailWrapper)
+def get_test_email_status(test_id: str, db: Session = Depends(get_db)):
+    task = test_email_status_cache.get(test_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Test status not found")
+
+    if task["status"] == "completed":
+        email = db.query(TestEmail).filter(TestEmail.id == task["email_id"]).first()
+        return TestEmailWrapper(
+            message=task["message"],
+            status=status.HTTP_200_OK,
+            # test_id=test_id,
+            data=email,
+        )
+
+    elif task["status"] == "failed":
+        raise HTTPException(status_code=500, detail=task["error"])
+
+    return TestEmailWrapper(message="Still working...", status=status.HTTP_202_ACCEPTED, test_id=test_id, data=None)
 
 
 @router.get("/test_single_email/{test_email_id}", response_model=TestEmailResponseWrapper)

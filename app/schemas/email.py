@@ -56,7 +56,8 @@ class TestEmailBase(BaseModel):
 class TestEmailWrapper(BaseModel):
     message: str
     status: int
-    data: TestEmailBase
+    test_id: Optional[str] = None
+    data: Optional[TestEmailBase] = None
 
 
 class TestEmailResponse(BaseModel):

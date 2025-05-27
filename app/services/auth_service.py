@@ -67,15 +67,6 @@ class AuthService:
             credit_entry = Credit(
                 user_id=firebase_user.uid,
                 is_paid=False,
-                total_credits=100,
-                remaining_credits=100,
-                created_at=datetime.now(timezone.utc),
-                last_updated=datetime.now(timezone.utc),
-                expires_at=datetime.now(timezone.utc) + timedelta(days=730),
-            )
-            credit_entry = Credit(
-                user_id=firebase_user.uid,
-                is_paid=False,
                 total_credits=100,  # add free credits to the use
                 remaining_credits=100,  # and remaining credits of uesr
                 created_at=datetime.utcnow(),
@@ -170,6 +161,18 @@ class AuthService:
                 first_name=name,
                 # add other fields if needed
             )
+            credit_entry = Credit(
+                user_id=firebase_uid,
+                is_paid=False,
+                total_credits=100,  # add free credits to the use
+                remaining_credits=100,  # and remaining credits of uesr
+                created_at=datetime.utcnow(),
+                last_updated=datetime.utcnow(),
+                expires_at=datetime.utcnow() + timedelta(days=365),  # 1 years
+            )
+
+            self.db.add(credit_entry)
+
             self.db.add(user)
             self.db.commit()
             self.db.refresh(user)
