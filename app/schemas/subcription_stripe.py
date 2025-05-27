@@ -15,9 +15,9 @@ class UserInfo(BaseModel):
 
 
 class CheckoutSessionRequest(BaseModel):
-    card_title: str
+    success_url: str
     card_price: int
-    user_id: str
+    # user_id: str
     credits: int
 
 

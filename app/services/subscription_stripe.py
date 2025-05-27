@@ -23,7 +23,7 @@ class PaymentService:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_checkout_session(self, email: str, card_title: str, card_price: int, user_id: str, credits: int):
+    def create_checkout_session(self, email: str, success_url: str, card_price: int, credits: int,user_id: str):
         try:
             session = stripe.checkout.Session.create(
                 payment_method_types=["card"],
@@ -33,18 +33,19 @@ class PaymentService:
                 line_items=[
                     {
                         "price_data": {
-                            "currency": "usd",
-                            "product_data": {
-                                "name": card_title,
-                                "description": "Access to selected plan",
-                            },
-                            "unit_amount": card_price,
+                        "currency": "usd",
+                        "product_data": {
+                            "name": "Credit Purchase",
+                            "description": f"{credits} credits package"
                         },
+                        "unit_amount": card_price,
+                    },
+
                         "quantity": 1,
                     }
                 ],
-                success_url=f"{YOUR_DOMAIN}/payment-success",
-                cancel_url=f"{YOUR_DOMAIN}/payment-cancel",
+                success_url=success_url,
+                cancel_url=success_url,
                 metadata={
                     "user_id": str(user_id),
                     "credits": str(credits),
