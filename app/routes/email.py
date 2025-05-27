@@ -87,26 +87,23 @@ async def upload_bulk_email_file(
     db: Session = Depends(get_db),
     user: UserInfo = Depends(get_current_user),
 ):
-    # Check if the file is a CSV
     if file.filename.endswith(".csv"):
         try:
-            # Read the file content
             contents = await file.read()
             file_content = contents.decode("utf-8")
 
-            # Initialize the service
             service = EmailService(db)
-
-            # Process the CSV content
-            result = await service.validate_emails_from_csv(file_content)
+            result = await service.validate_emails_from_csv(user.user_Id, file_content, file.filename)
 
             return JSONResponse(
                 status_code=status.HTTP_201_CREATED,
-                content={
-                    "message": "Bulk emails created successfully from file",
-                    "Status_Code": status.HTTP_201_CREATED,
-                    "data": result,
-                },
+                content=jsonable_encoder(
+                    {
+                        "message": "Bulk emails created successfully from file",
+                        "Status_Code": status.HTTP_201_CREATED,
+                        "data": result,
+                    }
+                ),
             )
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
