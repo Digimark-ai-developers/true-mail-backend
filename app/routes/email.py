@@ -1,10 +1,8 @@
 from fastapi import (
     APIRouter,
     Depends,
-    File,
     HTTPException,
     Query,
-    UploadFile,
     status,
 )
 from fastapi.encoders import jsonable_encoder
@@ -21,6 +19,7 @@ from app.schemas.email import (
     AllTestEmaislOrderedByCreationTime,
     BulkEmailResponseWrapper,
     BulkEmailStatsWrapper,
+    BulkEmailUploadRequest,
     FileStatsResponse,
     FileStatsResponseWrapper,
     SimpleEmailCheckRequest,
@@ -155,32 +154,32 @@ def get_all_single_tested_emails_by_user_id(db: Session = Depends(get_db), user:
 
 
 # Bulk Email Endpoints
-@router.post(
-    "/bulk_email_stats_with_emails/upload",
-    summary="Upload a file (.csv or .txt) to create bulk email stats",
-    tags=["Bulk-Emails Upload By File (.csv, .txt .....)"],
-)
-async def upload_bulk_email_file(
+@router.post("/bulk_email_stats_with_emails/upload")
+async def upload_bulk_email_file_json(
     background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
+    request_data: BulkEmailUploadRequest,
     db: Session = Depends(get_db),
     user: UserInfo = Depends(get_current_user),
 ):
-    if not file.filename.endswith((".csv", ".txt")):
+    if not request_data.file_name.endswith((".csv", ".txt")):
         raise HTTPException(status_code=400, detail="File type not supported. Please upload a CSV or TXT file.")
 
     try:
-        contents = await file.read()
-        file_content = contents.decode("utf-8")
         task_id = str(uuid.uuid4())
 
-        # Save initial task status
         bulk_email_status_cache[task_id] = {
             "status": "processing",
             "message": "Processing bulk email file...",
         }
 
-        background_tasks.add_task(EmailService.process_bulk_email_upload, task_id, user.user_Id, file_content, file.filename, db)
+        background_tasks.add_task(
+            EmailService.process_bulk_email_upload,
+            task_id,
+            user.user_Id,
+            request_data.file_content,
+            request_data.file_name,
+            db,
+        )
 
         return {
             "message": "Bulk email file is being processed.",
@@ -190,6 +189,7 @@ async def upload_bulk_email_file(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.get("/bulk_email_status/{task_id}", response_model=BulkEmailResponseWrapper)
@@ -222,7 +222,7 @@ async def copy_paste_email_start(
     copy_paste_email_status_cache[task_id] = {"status": "processing"}
 
     service = EmailService(db)
-    background_tasks.add_task(service.copy_paste_emails_background, user.user_Id, payload.test_emails, task_id)
+    background_tasks.add_task(service.copy_paste_emails_background, user.user_Id, payload.test_emails, task_id,payload.file_name)
 
     return BulkEmailStatsWrapper(message="Email validation started. Check back shortly.", status=status.HTTP_202_ACCEPTED, task_id=task_id, data=None)
 
@@ -427,7 +427,7 @@ async def delete_bulk_emails_file(
 
 
 @router.get("/emails_for_csv/{file_id}", response_model=dowloadFileWrapper)
-def get_emails_for_csv(
+def download_emails_for_csv(
     file_id: int,
     include_risky: bool = Query(True),
     db: Session = Depends(get_db),

@@ -462,9 +462,10 @@ class EmailService:
         user_id: str,
         emails: List[str],
         task_id: str,
+        file_name: str = None,
     ):
         try:
-            result = await self.copy_past_emails(user_id=user_id, emails=emails)
+            result = await self.copy_past_emails(user_id=user_id, emails=emails, file_name=file_name)
             cache[task_id] = {
                 "status": "completed",
                 "message": "Emails validated successfully",
@@ -481,6 +482,7 @@ class EmailService:
         user_id: str,
         emails: List[str],
         sender_email: str = "test@example.com",
+        file_name: str = None,
     ) -> BulkEmailStatsResponseWithEmails:
         user = self.db.query(User).filter(User.user_id == user_id).first()
         if not user:
@@ -600,7 +602,7 @@ class EmailService:
 
         bulk_stat = BulkEmailStats(
             user_id=user_id,
-            file_name="Copy_Past",  # Using a default filename
+            file_name=file_name,  # Using a default filename
             duplicate_email=duplicate_count,
             total_valid_emails=total_valid,
             deliverable=deliverable_percent,
@@ -636,7 +638,7 @@ class EmailService:
             return BulkEmailStatsResponseWithEmails(
                 user_id=user_id,
                 file_id=bulk_stat.id,
-                file_name="Copy_Past",
+                file_name=file_name,
                 test_emails=[
                     TestEmailBase(
                         user_tested_email=e.user_tested_email,
@@ -747,15 +749,28 @@ class EmailService:
         return query.all()
 
     def get_all_files_with_delieved_emails_and_status(self, user_id: str):
-        files = self.db.query(BulkEmailStats).filter(BulkEmailStats.user_id == user_id).all()
+        files = (
+            self.db.query(BulkEmailStats)
+            .filter(BulkEmailStats.user_id == user_id)
+            .order_by(BulkEmailStats.created_at.desc())  # 👈 sort by latest
+            .all()
+        )
         result = []
 
         for file in files:
-            total_emails = self.db.query(TestEmail).filter(TestEmail.file_id == file.id, TestEmail.user_id == user_id).count()
+            total_emails = (
+                self.db.query(TestEmail)
+                .filter(TestEmail.file_id == file.id, TestEmail.user_id == user_id)
+                .count()
+            )
 
             deliverable_count = (
                 self.db.query(TestEmail)
-                .filter(TestEmail.file_id == file.id, TestEmail.user_id == user_id, TestEmail.is_deliverable.is_(True))
+                .filter(
+                    TestEmail.file_id == file.id,
+                    TestEmail.user_id == user_id,
+                    TestEmail.is_deliverable.is_(True),
+                )
                 .count()
             )
 
@@ -770,3 +785,4 @@ class EmailService:
             )
 
         return result
+

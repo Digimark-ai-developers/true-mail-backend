@@ -114,6 +114,9 @@ class dowloadFileWrapper(BaseModel):
     status: int
     data: List[TestEmailResponse]
 
+class BulkEmailUploadRequest(BaseModel):
+    file_name: str
+    file_content: str  # plain text with newlines
 
 class AllTestEmaislByUserId(BaseModel):
     message: str
@@ -195,6 +198,7 @@ class CreditUsageBase(BaseModel):
 
 
 class BulkEmailStatsCreateWithEmails(BaseModel):
+    file_name: Optional[str] = None
     test_emails: List[str] = Field(..., description="List of email addresses to be tested")
 
     class Config:
@@ -226,10 +230,10 @@ class BulkEmailResponseWrapper(BaseModel):
 
 class FileStats(BaseModel):
     id: int
-    file_name: str
-    total_emails: int
-    deliverable: int
-    status: int
+    file_name: Optional[str] = None
+    total_emails: Optional[int] = None
+    deliverable: Optional[int] = None
+    status: Optional[str] = None
 
 
 class FileStatsResponse(BaseModel):

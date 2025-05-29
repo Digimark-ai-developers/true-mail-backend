@@ -162,7 +162,7 @@ def auth_google(code: str, db: Session = Depends(get_db)):
                 "token": firebase_id_token,
             }
         )
-        frontend_redirect = f"https://true-mail-frontend.vercel.app/home?{params}"
+        frontend_redirect = f"http://localhost:5173/home?{params}"
         return RedirectResponse(url=frontend_redirect)
 
     except Exception as e:

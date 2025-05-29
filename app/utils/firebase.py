@@ -2,7 +2,7 @@ import firebase_admin
 from firebase_admin import auth, credentials
 
 # Initialize Firebase App
-cred_path = "./app/truemail-5a597-firebase-adminsdk-fbsvc-529130fcbb.json"
+cred_path = "./app/truemail-5a597-firebase-adminsdk-fbsvc-4ef72180f6.json"
 cred = credentials.Certificate(cred_path)
 
 if not firebase_admin._apps:
