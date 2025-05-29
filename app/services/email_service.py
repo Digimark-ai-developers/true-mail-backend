@@ -731,3 +731,30 @@ class EmailService:
             query = query.filter(TestEmail.is_risky.is_(True))
 
         return query.all()
+
+    def get_all_files_with_delieved_emails_and_status(self, user_id: str):
+        files = self.db.query(BulkEmailStats).filter(BulkEmailStats.user_id == user_id).all()
+        result = []
+
+        for file in files:
+            total_emails = (
+                self.db.query(TestEmail).filter(TestEmail.file_id == file.id, TestEmail.user_id == user_id).count()
+            )
+
+            deliverable_count = (
+                self.db.query(TestEmail)
+                .filter(TestEmail.file_id == file.id, TestEmail.user_id == user_id, TestEmail.is_deliverable.is_(True))
+                .count()
+            )
+
+            result.append(
+                {
+                    "id": file.id,
+                    "file_name": file.file_name,
+                    "deliverable": deliverable_count,
+                    "total_emails": total_emails,
+                    "status": file.status,
+                }
+            )
+
+        return result

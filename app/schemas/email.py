@@ -117,7 +117,7 @@ class AllTestEmailsByFileResponseWrapper(BaseModel):
 
 
 class FileStatsResponse(BaseModel):
-    total: int
+    total: Optional[int] = None
     duplicates: int
     deliverable: int
     undeliverable: int
@@ -130,7 +130,7 @@ class FileStatsResponse(BaseModel):
 
 class FileStatsResponseWrapper(BaseModel):
     message: str
-    status: int
+    status: Optional[int] = None
     data: FileStatsResponse
 
 
@@ -193,3 +193,17 @@ class BulkEmailStatsResponseWithEmails(BaseModel):
     file_id: int
     file_name: str
     test_emails: List[TestEmailBase]
+
+
+class FileStats(BaseModel):
+    id: int
+    file_name: str
+    total_emails: int
+    deliverable: int
+    status: Optional[int] = None
+
+
+class FileStatsResponse(BaseModel):
+    message: str
+    status: Optional[int] = None
+    data: List[FileStats]

@@ -14,6 +14,7 @@ from app.schemas.email import (  # Import your Pydantic models
     AllTestEmaislByUserId,
     BulkEmailStatsCreateWithEmails,
     BulkEmailStatsRead,
+    FileStatsResponse,
     FileStatsResponseWrapper,
     TestEmailBase,
     TestEmailResponse,
@@ -243,3 +244,22 @@ def get_emails_for_csv(
         "status": status.HTTP_200_OK,
         "data": [TestEmailResponse.model_validate(jsonable_encoder(email)) for email in emails],
     }
+
+
+@router.get("/all_files_with_delieved_emails_and_status", response_model=FileStatsResponse)
+def get_user_files(user: UserInfo = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Get all uploaded files with their delivered email stats and status.
+
+    Args:
+
+        current_user (User): The currently authenticated user.
+
+    Returns:
+
+        JSONResponse: List of uploaded files with statistics.
+    """
+
+    service = EmailService(db)
+    files_data = service.get_all_files_with_delieved_emails_and_status(user.user_Id)
+    return {"message": "Files fetched successfully.", "status": status.HTTP_200_OK, "data": files_data}
