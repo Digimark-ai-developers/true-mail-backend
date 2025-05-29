@@ -585,7 +585,7 @@ class EmailService:
 
         return test_email
 
-    def get_all_test_emails(self, user_id: str) -> List[TestEmail]:
+    def get_all_emails(self, user_id: str) -> List[TestEmail]:
         return (
             self.db.query(TestEmail)
             .filter(TestEmail.user_id == user_id)
@@ -672,7 +672,7 @@ class EmailService:
 
         return db_filename.file_name
 
-    def soft_delete_test_email_by_id(self, test_email_id: int, user_id: str) -> dict:
+    def soft_delete_email_by_id(self, test_email_id: int, user_id: str) -> dict:
         db_test_email = (
             self.db.query(TestEmail)
             .filter(
