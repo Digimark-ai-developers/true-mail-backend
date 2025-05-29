@@ -79,28 +79,28 @@ class TestEmailResponse(BaseModel):
     user_tested_email: Optional[str] = None
     full_name: Optional[str] = None
     gender: Optional[str] = None
-    status: Optional[str] = None  # available
+    status: Optional[str] = None
     reason: Optional[str] = None
-    domain: str  # available
-    is_free: bool  # available
-    is_risky: Optional[bool] = None  # available
-    is_valid: bool  # available
-    is_disposable: bool  # available
-    is_deliverable: bool  # available
-    has_tag: bool
-    alphabetical_characters: int  # available
-    is_mailbox_full: bool
-    has_role: bool
-    is_accept_all: bool
-    has_numerical_characters: int  # available
-    has_unicode_symbols: int  # available
-    has_no_reply: bool
-    smtp_provider: Optional[str] = None  # available
+    domain: Optional[str] = None  # changed to Optional
+    is_free: Optional[bool] = None  # changed to Optional
+    is_risky: Optional[bool] = None
+    is_valid: Optional[bool] = None  # changed to Optional
+    is_disposable: Optional[bool] = None  # changed to Optional
+    is_deliverable: Optional[bool] = None  # changed to Optional
+    has_tag: Optional[bool] = None  # changed to Optional
+    alphabetical_characters: Optional[int] = None  # changed to Optional
+    is_mailbox_full: Optional[bool] = None  # changed to Optional
+    has_role: Optional[bool] = None  # changed to Optional
+    is_accept_all: Optional[bool] = None  # changed to Optional
+    has_numerical_characters: Optional[int] = None
+    has_unicode_symbols: Optional[int] = None
+    has_no_reply: Optional[bool] = None  # changed to Optional
+    smtp_provider: Optional[str] = None
     mx_record: Optional[str] = None
-    implicit_mx_record: Optional[str] = None  # available
-    score: int  # available
+    implicit_mx_record: Optional[str] = None
+    score: Optional[int] = None  # changed to Optional
 
-    model_config = ConfigDict(from_attributes=True)  # Pydantic v2 replacement for orm_mode=True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TestEmailResponseWrapper(BaseModel):
