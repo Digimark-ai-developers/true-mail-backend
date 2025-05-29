@@ -380,7 +380,7 @@ class EmailService:
 
     # Update the service method
 
-    async def validate_emails(
+    async def copy_past_emails(
         self,
         user_id: str,
         emails: List[str],

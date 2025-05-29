@@ -72,7 +72,7 @@ def get_all_single_tested_emails_by_user_id(db: Session = Depends(get_db), user:
 
 
 @router.post(
-    "/bulk_email_test_copy_past",
+    "/copy_past_email",
     summary="Validate multiple emails at once Copy / Past",
     response_model=BulkEmailStatsCreateWithEmails,
 )
@@ -82,7 +82,7 @@ async def validate_multiple_emails(
     user: UserInfo = Depends(get_current_user),
 ):
     service = EmailService(db)
-    result = await service.validate_emails(user_id=user.user_Id, emails=payload.test_emails)
+    result = await service.copy_past_emails(user_id=user.user_Id, emails=payload.test_emails)
 
     return JSONResponse(
         status_code=status.HTTP_201_CREATED,
