@@ -33,7 +33,7 @@ async def create_single_email(
     test_email: TestEmailBase, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)
 ):
     service = EmailService(db)
-    email = await service.create_test_email(user.user_Id, test_email)
+    email = await service.create_email(user.user_Id, test_email)
 
     return TestEmailWrapper(
         message="Email tested successfully.",

@@ -35,7 +35,7 @@ class EmailService:
     def __init__(self, db: Session):
         self.db = db
 
-    async def create_test_email(self, user_id: str, test_email: TestEmailBase, sender_email: str = "test@example.com"):
+    async def create_email(self, user_id: str, test_email: TestEmailBase, sender_email: str = "test@example.com"):
         # Step 1: Validate User
         user = self.db.query(User).filter(User.user_id == user_id).first()
         if not user:
@@ -61,7 +61,7 @@ class EmailService:
 
         # Step 4: Safely Handle MX Record
         mx_record_result = get_mx_record(target_email)
-        mx_record = mx_record_result[0] if mx_record_result else None
+        mx_record = mx_record_result[0] if mx_record_result else None or "max record not found  "
         implicit_mx = mx_record_result[1] if mx_record_result and len(mx_record_result) > 1 else None
 
         # Step 5: Run consolidated email checks
@@ -131,7 +131,7 @@ class EmailService:
                 "is_risky": is_risky,
                 "soft_delete": False,
                 "is_valid": is_syntax_valid and smtp_deliverable,
-                "status": "valid" if is_syntax_valid and smtp_deliverable else "invalid",
+                "status": "Deliverable" if is_syntax_valid and smtp_deliverable else "invalid_email",
                 "is_deliverable": smtp_deliverable,
                 "reason": validation_reason or smtp_reason,
                 "is_disposable": is_disposable,
@@ -171,12 +171,13 @@ class EmailService:
             return db_test_email
         except IntegrityError:
             self.db.rollback()
-            logger.exception("Database error during create_test_email.")
+            logger.exception("Database error during create_email.")
             raise HTTPException(
                 status_code=500,
                 detail="Database error occurred while testing email",
             )
 
+    # <---------------------------------- Validate email check form csv . txt files--------------
     async def validate_emails_from_csv(
         self,
         user_id: str,
@@ -460,7 +461,7 @@ class EmailService:
             )
 
             is_email_valid = is_syntax_valid and smtp_deliverable
-            status = "valid" if is_email_valid else "invalid"
+            status = smtp_deliverable if is_email_valid else "invalid"
 
             if is_email_valid:
                 total_valid += 1
@@ -474,7 +475,7 @@ class EmailService:
                 user_tested_email=email,
                 full_name=full_name,
                 gender="Unknown",
-                status=status,
+                status=smtp_deliverable and "Deliverable",
                 reason=validation_reason or smtp_reason,
                 domain=domain_name,
                 is_free=False,
@@ -507,6 +508,7 @@ class EmailService:
             duplicate_email=duplicate_count,
             total_valid_emails=total_valid,
             deliverable=deliverable_percent,
+            status=status,
             risky=risky_count,
             total=total_emails,
             created_at=now,
