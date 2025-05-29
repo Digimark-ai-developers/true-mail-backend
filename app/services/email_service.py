@@ -503,7 +503,7 @@ class EmailService:
 
         bulk_stat = BulkEmailStats(
             user_id=user_id,
-            file_name="direct_input.csv",  # Using a default filename
+            file_name="Copy_Past",  # Using a default filename
             duplicate_email=duplicate_count,
             total_valid_emails=total_valid,
             deliverable=deliverable_percent,
@@ -538,7 +538,7 @@ class EmailService:
             return BulkEmailStatsResponseWithEmails(
                 user_id=user_id,
                 file_id=bulk_stat.id,
-                file_name="direct_input.csv",
+                file_name="Copy_Past",
                 test_emails=[
                     TestEmailBase(
                         user_tested_email=e.user_tested_email,

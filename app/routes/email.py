@@ -1,7 +1,7 @@
 # app\routes\email.py
 
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -68,42 +68,7 @@ def get_all_single_tested_emails_by_user_id(db: Session = Depends(get_db), user:
     }
 
 
-@router.post(
-    "/bulk_email_stats_with_emails/upload",
-    summary="Upload a file (.csv or .txt) to create bulk email stats",
-    tags=["Bulk-Emails Upload By File (.csv, .txt .....)"],
-)
-async def upload_bulk_email_file(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    user: UserInfo = Depends(get_current_user),
-):
-    if file.filename.endswith(".csv"):
-        try:
-            contents = await file.read()
-            file_content = contents.decode("utf-8")
-
-            service = EmailService(db)
-
-            # ✅ Use `user.id` instead of `user.user_id`
-            result = await service.validate_emails_from_csv(user.user_Id, file_content, file.filename)
-
-            return JSONResponse(
-                status_code=status.HTTP_201_CREATED,
-                content=jsonable_encoder(
-                    {
-                        "message": "Bulk emails created successfully from file",
-                        "Status_Code": status.HTTP_201_CREATED,
-                        "data": result,
-                    }
-                ),
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
-    else:
-        raise HTTPException(status_code=400, detail="File type not supported. Please upload a CSV file.")
-
-    # new route copy past
+# new route copy past
 
 
 @router.post(
