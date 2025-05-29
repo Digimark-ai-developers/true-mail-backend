@@ -1,6 +1,5 @@
 from fastapi import (
     APIRouter,
-    Body,
     Depends,
     File,
     HTTPException,
@@ -21,6 +20,7 @@ from app.schemas.email import (
     AllTestEmaislByUserId,
     AllTestEmaislOrderedByCreationTime,
     BulkEmailResponseWrapper,
+    BulkEmailStatsWrapper,
     FileStatsResponse,
     FileStatsResponseWrapper,
     SimpleEmailCheckRequest,
@@ -39,7 +39,7 @@ from app.services.email_service import EmailService
 from app.utils.mail_utils import load_disposable_domains
 from fastapi import BackgroundTasks
 import uuid
-from app.utils.cache import test_email_status_cache, bulk_email_status_cache
+from app.utils.cache import test_email_status_cache, bulk_email_status_cache, copy_paste_email_status_cache
 
 
 router = APIRouter(prefix="/email", tags=["Email Validation Functions"])
@@ -48,7 +48,7 @@ DEFAULT_SENDER_EMAIL = "verify@example.com"
 DISPOSABLE_DOMAINS = load_disposable_domains()
 
 
-@router.post("/test_single_email", response_model=TestEmailWrapper)
+@router.post("/single_email", response_model=TestEmailWrapper)
 async def create_single_email(
     test_email: SimpleEmailCheckRequest,
     background_tasks: BackgroundTasks,
@@ -68,7 +68,7 @@ async def create_single_email(
     )
 
 
-@router.get("/test_single_email_status/{test_id}", response_model=TestEmailWrapper)
+@router.get("/single_email_status/{test_id}", response_model=TestEmailWrapper)
 def get_test_email_status(test_id: str, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
     task = test_email_status_cache.get(test_id)
     if not task:
@@ -89,7 +89,7 @@ def get_test_email_status(test_id: str, db: Session = Depends(get_db), user: Use
     return TestEmailWrapper(message="Still working...", status=status.HTTP_202_ACCEPTED, test_id=test_id, data=None)
 
 
-@router.get("/test_single_email/{test_email_id}", response_model=TestEmailResponseWrapper)
+@router.get("/single_email/{test_email_id}", response_model=TestEmailResponseWrapper)
 def get_single_test_email(test_email_id: int, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
     """
     Retrieve a single tested email by its ID.
@@ -114,7 +114,7 @@ def get_single_test_email(test_email_id: int, db: Session = Depends(get_db), use
     )
 
 
-@router.get("/recent_tested_emails", response_model=AllTestEmaislOrderedByCreationTime)
+@router.get("/recent_emails", response_model=AllTestEmaislOrderedByCreationTime)
 async def get_all_recent_tested_emails(db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
     """
     Get all tested emails ordered by creation time.
@@ -133,7 +133,7 @@ async def get_all_recent_tested_emails(db: Session = Depends(get_db), user: User
     }
 
 
-@router.get("/all_single_tested_emails", response_model=AllTestEmaislByUserId)
+@router.get("/all_single_emails", response_model=AllTestEmaislByUserId)
 def get_all_single_tested_emails_by_user_id(db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
     """
     Get all test emails for the current user.
@@ -174,21 +174,13 @@ async def upload_bulk_email_file(
         file_content = contents.decode("utf-8")
         task_id = str(uuid.uuid4())
 
-
         # Save initial task status
         bulk_email_status_cache[task_id] = {
             "status": "processing",
             "message": "Processing bulk email file...",
         }
 
-        background_tasks.add_task(
-            EmailService.process_bulk_email_upload,
-            task_id,
-            user.user_Id,
-            file_content,
-            file.filename,
-            db
-        )
+        background_tasks.add_task(EmailService.process_bulk_email_upload, task_id, user.user_Id, file_content, file.filename, db)
 
         return {
             "message": "Bulk email file is being processed.",
@@ -198,71 +190,77 @@ async def upload_bulk_email_file(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
 
 @router.get("/bulk_email_status/{task_id}", response_model=BulkEmailResponseWrapper)
-def get_bulk_email_status(task_id: str):
+def get_bulk_email_status(task_id: str, user: UserID = Depends(get_current_user)):
     task = bulk_email_status_cache.get(task_id)
 
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
     if task["status"] == "completed":
-        return {
-            "status": 200,
-            "message": task["message"],
-            "task_id": task_id,
-            "data": task["result"]
-        }
+        return {"status": 200, "message": task["message"], "task_id": task_id, "data": task["result"]}
 
     elif task["status"] == "failed":
         raise HTTPException(status_code=500, detail=task["error"])
 
-    return {
-        "status": 202,
-        "message": "Still processing...",
-        "task_id": task_id,
-        "data": None
-    }
+    return {"status": 202, "message": "Still processing...", "task_id": task_id, "data": None}
 
 
-
-@router.post("/bulk_email_test_by_copy_paste", status_code=status.HTTP_201_CREATED)
-def create_bulk_email_by_copy_paste(
-    payload: BulkEmailStatsCreateWithEmails = Body(),
+@router.post(
+    "/copy_paste_email",
+    summary="Validate multiple emails from pasted input",
+)
+async def copy_paste_email_start(
+    payload: BulkEmailStatsCreateWithEmails,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    user: UserInfo = Depends(get_current_user),
+    user: UserID = Depends(get_current_user),
 ):
-    """
-    Test bulk emails by providing a list of emails directly (copy/paste).
+    task_id = str(uuid.uuid4())
+    copy_paste_email_status_cache[task_id] = {"status": "processing"}
 
-    Args:
-
-        emails (List[str]): List of email addresses to test.
-        current_user (User): The currently authenticated user.
-
-    Returns:
-
-        JSONResponse: Result summary of tested emails.
-
-    Raises:
-
-        HTTPException: If input is invalid or testing fails.
-    """
     service = EmailService(db)
-    result = service.create_bulk_email_with_copy_paste(payload, user.user_Id)
+    background_tasks.add_task(service.copy_paste_emails_background, user.user_Id, payload.test_emails, task_id)
 
-    return JSONResponse(
-        status_code=status.HTTP_201_CREATED,
-        content={
-            "message": "Bulk emails created successfully from copy/paste",
-            "Status_Code": status.HTTP_201_CREATED,
-            "data": result.dict(),
-        },
+    return BulkEmailStatsWrapper(message="Email validation started. Check back shortly.", status=status.HTTP_202_ACCEPTED, task_id=task_id, data=None)
+
+
+@router.get(
+    "/copy_paste_email_status/{task_id}",
+    summary="Check status of pasted email validation",
+    response_model=BulkEmailStatsWrapper,
+)
+def get_copy_paste_email_status(
+    task_id: str,
+    db: Session = Depends(get_db),
+    user: UserID = Depends(get_current_user),
+):
+    task = copy_paste_email_status_cache.get(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Validation status not found")
+
+    if task["status"] == "completed":
+        return BulkEmailStatsWrapper(
+            message=task["message"],
+            status=status.HTTP_200_OK,
+            task_id=task_id,
+            data=task["data"].model_dump(),  # ✅ convert to dict
+        )
+
+    elif task["status"] == "failed":
+        raise HTTPException(status_code=500, detail=task["error"])
+
+    return BulkEmailStatsWrapper(
+        message="Still working...",
+        status=status.HTTP_202_ACCEPTED,
+        task_id=task_id,
+        data=None,
     )
 
 
-@router.get("/all_tested_bulk_emails_group_by_files", response_model=AllTestEmailsByFileResponseWrapper)
+@router.get("/all_bulk_emails_group_by_files", response_model=AllTestEmailsByFileResponseWrapper)
 def get_all_bulk_emails_grouped_by_files(
     db: Session = Depends(get_db),
     user: UserID = Depends(get_current_user),
@@ -363,7 +361,7 @@ async def update_filename(
     )
 
 
-@router.delete("/single_tested_email", response_model=TestEmailWrapper)
+@router.delete("/single_email", response_model=TestEmailWrapper)
 async def delete_single_tested_email(
     test_email_id: int = Query(...),
     db: Session = Depends(get_db),

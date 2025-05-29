@@ -26,9 +26,10 @@ GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 GITHUB_REDIRECT_URI = os.getenv("GITHUB_REDIRECT_URI")
 # GITHUB_REDIRECT_URI = "https://true-mail-backend.vercel.app/auth/github"
 
-FACEBOOK_CLIENT_ID = "419750910829026"
-FACEBOOK_CLIENT_SECRET = "59bd71e6ac017a07faa3b22f44d8a2b6"
-FACEBOOK_REDIRECT_URI = "http://localhost:8000/auth/facebook"
+FACEBOOK_CLIENT_ID = os.getenv("FACEBOOK_CLIENT_ID")
+FACEBOOK_CLIENT_SECRET = os.getenv("FACEBOOK_CLIENT_SECRET")
+FACEBOOK_REDIRECT_URI = os.getenv("FACEBOOK_REDIRECT_URI")
+
 
 class AuthService:
     def __init__(self, db: Session):
@@ -186,6 +187,25 @@ class AuthService:
 
         return user_info_response.json(), access_token
 
+    def login_with_facebook_token(self, access_token: str):
+        firebase_api_key = os.getenv("FIREBASE_API_KEY")
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={firebase_api_key}"
+
+        payload = {
+            "postBody": f"access_token={access_token}&providerId=facebook.com",
+            "requestUri": "http://localhost",  # Firebase requires a requestUri but doesn't validate it strictly
+            "returnSecureToken": True,
+            "returnIdpCredential": True,
+        }
+
+        response = requests.post(url, json=payload)
+        if response.status_code != 200:
+            error_detail = response.json().get("error", {}).get("message", "Unknown error")
+            raise HTTPException(status_code=401, detail=f"Facebook sign-in failed: {error_detail}")
+
+        data = response.json()
+        return data["idToken"], data["localId"]
+
     def get_or_create_user(self, user_info: dict, firebase_uid: str = None):
         email = user_info.get("email")
         name = user_info.get("name")
@@ -196,6 +216,7 @@ class AuthService:
                 user_id=firebase_uid,  # <-- Store Firebase UID here
                 email=email,
                 first_name=name,
+                created_at=datetime.utcnow(),
                 # add other fields if needed
             )
             credit_entry = Credit(
@@ -215,6 +236,7 @@ class AuthService:
             self.db.refresh(user)
 
         return user
+
     def get_facebook_oauth_url(self):
         return (
             f"https://www.facebook.com/v19.0/dialog/oauth"

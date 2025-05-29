@@ -53,6 +53,20 @@ class TestEmailBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class BulkEmailStatsResponseWithEmails(BaseModel):
+    user_id: str
+    file_id: int
+    file_name: str
+    test_emails: List[TestEmailBase]  # List of validated emails
+
+
+class BulkEmailStatsWrapper(BaseModel):
+    message: str
+    status: int
+    task_id: Optional[str] = None
+    data: Optional[BulkEmailStatsResponseWithEmails] = None
+
+
 class TestEmailWrapper(BaseModel):
     message: str
     status: int
@@ -129,7 +143,7 @@ class FileStatsResponse(BaseModel):
     deliverable: int
     undeliverable: int
     risky: int
-    status: str
+    status: Optional[str]
     duplicated_percentage: float
     deliverable_percentage: float
     undeliverable_percentage: float
@@ -186,7 +200,6 @@ class BulkEmailStatsCreateWithEmails(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "user_id": "user_123",
                 "file_name": "marketing_emails_may.csv",
                 "test_emails": [
                     "john@example.com",
@@ -203,6 +216,7 @@ class BulkEmailStatsResponseWithEmails(BaseModel):
     file_name: str
     test_emails: list[TestEmailBase]
 
+
 class BulkEmailResponseWrapper(BaseModel):
     message: str
     status: int
@@ -210,13 +224,12 @@ class BulkEmailResponseWrapper(BaseModel):
     data: Optional[BulkEmailStatsResponseWithEmails] = None
 
 
-
 class FileStats(BaseModel):
     id: int
     file_name: str
     total_emails: int
     deliverable: int
-    status: str
+    status: int
 
 
 class FileStatsResponse(BaseModel):
