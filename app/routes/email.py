@@ -76,7 +76,7 @@ def get_all_single_tested_emails_by_user_id(db: Session = Depends(get_db), user:
     summary="Validate multiple emails at once Copy / Past",
     response_model=BulkEmailStatsCreateWithEmails,
 )
-async def validate_multiple_emails(
+async def bulk_copy_past_emails(
     payload: BulkEmailStatsCreateWithEmails,
     db: Session = Depends(get_db),
     user: UserInfo = Depends(get_current_user),
