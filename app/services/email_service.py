@@ -69,20 +69,19 @@ class EmailService:
             target_email=target_email, sender_email=sender_email, disposable_domains=disposable_domains
         )
 
-        email_domain = target_email.split("@")[-1].lower()
+        email_domain = target_email.split("@", 1)[-1].lower()
         is_disposable = int(email_domain in disposable_domains)
 
-        email_domain = target_email.split("@")[-1].lower()
-        # is_deliverable = int(email_domain in disposable_domains)
-
         # Extract domain part (e.g., "gmail" from "test@gmail.com")
-        domain_name = target_email.split("@")[-1].split(".")[0]
-        match = re.search(r"@([\w\-]+)\.", target_email)
+        domain_name = target_email.split("@", 1)[-1].lower()
+        match = re.search(r"@([a-zA-Z0-9.-]+)", target_email)
         domain_name = match.group(1) if match else None
         # Extract domain and name from email
 
-        local_part = re.sub(r"[^a-zA-Z._-]", "", target_email.split("@")[0])  # Remove numbers/symbols except separators
-        cleaned_name = re.sub(r"[\._-]+", " ", local_part).strip()  # Replace _, ., - with space
+        local_part = re.sub(
+            r"[^a-zA-Z._-]", "", target_email.split("@", 1)[0]
+        )  # Remove numbers/symbols except separators
+        cleaned_name = re.sub(r"[\\._-]+", " ", local_part).strip()  # Replace _, ., - with space
         full_name = " ".join(part.capitalize() for part in cleaned_name.split())
 
         # Step 5.1: Analyze email string
@@ -97,7 +96,7 @@ class EmailService:
 
         # Extract domain for smtp_provider detection
         try:
-            _, domain = target_email.split("@")
+            _, domain = target_email.split("@", 1)
         except ValueError:
             domain = ""
 
@@ -233,13 +232,13 @@ class EmailService:
                 target_email=email, sender_email=sender_email, disposable_domains=disposable_domains
             )
 
-            domain = email.split("@")[1].lower()
+            domain = email.split("@", 1)[1].lower()
             is_disposable = int(domain in disposable_domains)
 
-            match = re.search(r"@([\w\-]+)\\.", email)
-            domain_name = match.group(1) if match else "unknown"
+            match = re.search(r"@([a-zA-Z0-9.-]+)", email)
+            domain_name = match.group(1).lower() if match else "unknown domain"
 
-            local_part = re.sub(r"[^a-zA-Z._-]", "", email.split("@")[0])
+            local_part = re.sub(r"[^a-zA-Z._-]", "", email.split("@", 1)[0])
             cleaned_name = re.sub(r"[\\._-]+", " ", local_part).strip()
             full_name = " ".join(part.capitalize() for part in cleaned_name.split()) or "N/A"
 
