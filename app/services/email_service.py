@@ -114,7 +114,7 @@ class EmailService:
                     "is_risky": is_risky,
                     "soft_delete": False,
                     "is_valid": is_syntax_valid and smtp_deliverable,
-                    "status": "Deliverable" if is_syntax_valid and smtp_deliverable else "invalid_email",
+                    "status": "Deliverable" if is_syntax_valid and smtp_deliverable else "Invalid Email",
                     "is_deliverable": smtp_deliverable,
                     "reason": validation_reason or smtp_reason,
                     "is_disposable": is_disposable,
@@ -466,6 +466,14 @@ class EmailService:
     ):
         try:
             result = await self.copy_past_emails(user_id=user_id, emails=emails, file_name=file_name)
+            bulk_email = self.db.query(BulkEmailStats).filter(
+                BulkEmailStats.id == result.file_id,
+                BulkEmailStats.user_id == user_id
+            ).first()
+            bulk_email.status = "Completed"
+            self.db.commit()
+
+
             cache[task_id] = {
                 "status": "completed",
                 "message": "Emails validated successfully",
@@ -607,7 +615,7 @@ class EmailService:
             total_valid_emails=total_valid,
             deliverable=deliverable_percent,
             risky=risky_count,
-            status="completed",
+            status="In-Progress",
             total=total_emails,
             created_at=now,
             soft_delete=False,

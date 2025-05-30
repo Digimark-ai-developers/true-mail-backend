@@ -7,6 +7,7 @@ import socket
 import ssl
 from email.utils import parseaddr
 from typing import Optional
+import functools
 
 import dns.resolver
 import whois
@@ -29,6 +30,8 @@ def validate_email_syntax(email):
     return bool(re.match(pattern, email))
 
 
+
+@functools.lru_cache(maxsize=1024)
 def get_mx_record(domain):
     try:
         resolver = dns.resolver.Resolver()
