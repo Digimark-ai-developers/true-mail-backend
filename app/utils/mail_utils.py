@@ -133,7 +133,7 @@ def check_email_reachability(email, sender_email, disposable_domains):
         return False, f"SMTP server for '{domain}' is not accessible"
 
     # Step 7: Perform the SMTP verification process
-    port = [220, 250, 450, 500, 512, 552]
+
     try:
         server = smtplib.SMTP(timeout=2)
         server.set_debuglevel(0)
@@ -143,7 +143,7 @@ def check_email_reachability(email, sender_email, disposable_domains):
         code, message = server.rcpt(address)
         message_str = message.decode("utf-8", "ignore") if hasattr(message, "decode") else str(message)
 
-        if code in port:
+        if code == 250:
             return True, "VALID", dm_info
         return False, f"Invalid: SMTP Error {code} - {message_str}", dm_info
     except Exception as e:

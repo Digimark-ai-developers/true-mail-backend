@@ -1,15 +1,12 @@
 # app\routes\email.py
-
-
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
-# from app.utils.email_tools import check_email_reachability, validate_email_syntax
 from app.database.db_config import get_db
 from app.schemas.auth import UserID
-from app.schemas.email import (  # Import your Pydantic models
+from app.schemas.email import (
     AllTestEmailsByFileResponseWrapper,
     AllTestEmaislByUserId,
     BulkEmailStatsCreateWithEmails,
