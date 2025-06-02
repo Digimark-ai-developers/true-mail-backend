@@ -155,6 +155,52 @@ def check_email_reachability(email, sender_email, disposable_domains):
             pass
 
 
+# def perform_email_checks(target_email: str, sender_email: str, disposable_domains: list):
+#     # Extract domain and provider
+
+#     try:
+#         domain = target_email.split("@")[1].lower()
+#     except IndexError:
+#         return False, "Invalid email format", False, "Invalid email format"
+
+#     smtp_provider = get_smtp_provider(domain)
+#     trusted_providers = {"Google", "Yahoo", "Microsoft"}
+
+#     # Step 1: Perform MX Check (for safety before SMTP)
+#     mx_record, implicit_mx = get_mx_record(domain)
+#     if not mx_record:
+#         return False, f"Domain '{domain}' has no valid MX records", False, "MX lookup failed"
+
+#     # Step 2: Try verifying SMTP server connection (not email itself)
+#     smtp_accessible = verify_smtp_server(mx_record, domain)
+
+#     # Step 3: Check reachability (full verification including SMTP RCPT TO)
+#     reachability_result = check_email_reachability(target_email, sender_email, disposable_domains)
+
+#     if isinstance(reachability_result, tuple):
+#         is_deliverable = reachability_result[0]
+#         validation_reason = reachability_result[1]
+#     else:
+#         is_deliverable = reachability_result
+#         validation_reason = "Reachability check completed."
+
+#     # Final verdict - allow fallback for trusted providers
+#     if is_deliverable:
+#         is_valid = True
+#         smtp_reason = "SMTP verification passed"
+#     elif smtp_provider in trusted_providers and smtp_accessible:
+#         is_valid = True
+#         is_deliverable = True
+#         validation_reason = f"Trusted provider ({smtp_provider}) - SMTP response"
+#         smtp_reason = "SMTP access confirmed, but verification skipped for trusted provider"
+#     else:
+#         is_valid = False
+#         is_deliverable = False
+#         smtp_reason = "SMTP verification failed"
+
+#     return is_deliverable, smtp_reason, is_valid, validation_reason
+
+
 def perform_email_checks(target_email: str, sender_email: str, disposable_domains: list):
     # Extract domain and provider
     try:
@@ -163,7 +209,6 @@ def perform_email_checks(target_email: str, sender_email: str, disposable_domain
         return False, "Invalid email format", False, "Invalid email format"
 
     smtp_provider = get_smtp_provider(domain)
-    trusted_providers = {"Google", "Yahoo", "Microsoft"}
 
     # Step 1: Perform MX Check (for safety before SMTP)
     mx_record, implicit_mx = get_mx_record(domain)
@@ -183,19 +228,28 @@ def perform_email_checks(target_email: str, sender_email: str, disposable_domain
         is_deliverable = reachability_result
         validation_reason = "Reachability check completed."
 
-    # Final verdict - allow fallback for trusted providers
+    # Final Verdict Logic
+
+    # If deliverable via SMTP RCPT check, trust it
     if is_deliverable:
-        is_valid = True
+        is_valid = smtp_accessible
         smtp_reason = "SMTP verification passed"
-    elif smtp_provider in trusted_providers and smtp_accessible:
-        is_valid = True
-        is_deliverable = True
-        validation_reason = f"Trusted provider ({smtp_provider}) - SMTP response"
-        smtp_reason = "SMTP access confirmed, but verification skipped for trusted provider"
+
+    # Previously you allowed trusted providers to override deliverability — that caused false positives.
+    # Now we only allow a small grace period if:
+    # - The email was undeliverable
+    # - But the provider is known/trusted AND the server is accessible
+    elif smtp_provider in {"Google", "Yahoo", "Microsoft"} and smtp_accessible:
+        # Optional: Add logic here to detect catch-all domains or retry with different checks
+        is_valid = False  # Don't assume validity just because it's Google/Yahoo/etc.
+        smtp_reason = "Trusted provider but email not confirmed deliverable"
+        validation_reason = f"SMTP accessible for {smtp_provider}, but RCPT check failed"
+
+    # If nothing else passes, mark as invalid
     else:
         is_valid = False
-        is_deliverable = False
         smtp_reason = "SMTP verification failed"
+        validation_reason = "SMTP unreachable or email not deliverable"
 
     return is_deliverable, smtp_reason, is_valid, validation_reason
 
