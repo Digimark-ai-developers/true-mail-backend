@@ -214,6 +214,14 @@ def evaluate_email_score_and_risk(
     score = 0
     tags = []
 
+    if not is_syntax_valid or not smtp_deliverable:
+        if not is_syntax_valid:
+            tags.append("Invalid syntax")
+        if not smtp_deliverable:
+            tags.append("SMTP undeliverable")
+
+        return 0, True, tags
+
     # 1. Syntax check (10 points)
     if is_syntax_valid:
         score += 10

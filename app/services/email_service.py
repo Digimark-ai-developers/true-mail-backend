@@ -427,10 +427,10 @@ class EmailService:
                 target_email=email, sender_email=sender_email, disposable_domains=disposable_domains
             )
 
-            domain = email.split("@")[1].lower()
+            domain = email.split("@", 1)[1].lower()
             is_disposable = int(domain in disposable_domains)
 
-            match = re.search(r"@([\w\-]+)\\.", email)
+            match = re.search(r"@([a-zA-Z0-9.-]+)", email)
             domain_name = match.group(1) if match else "unknown"
 
             local_part = re.sub(r"[^a-zA-Z._-]", "", email.split("@")[0])
