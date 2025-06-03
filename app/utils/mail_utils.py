@@ -92,47 +92,61 @@ def validate_email_syntax(email):
 def get_mx_record(domain):
     try:
         resolver = dns.resolver.Resolver()
-        resolver.timeout = 1
-        resolver.lifetime = 3
+        resolver.timeout = 3  # Increased from 1
+        resolver.lifetime = 5  # Increased from 3
         records = resolver.resolve(domain, "MX")
         if records:
             mx_records = sorted([(r.preference, r.exchange.to_text()) for r in records], key=lambda x: x[0])
             mx_record = mx_records[0][1]
             return mx_record, False  # False = not implicit MX
         return None, True  # Implicit MX
-    except:
+    except Exception as e:
+        print(f"MX lookup error for {domain}: {str(e)}")
         return None, True  # No record found or error = implicit MX
 
 
 def verify_smtp_server(mx_record, domain):
-    ports = [587, 465, 25]  # Try secure ports first
+    ports = [25, 587, 465]  # Try port 25 first as it's most common for verification
+    smtp_timeout = 5  # Increased timeout
+    
     for port in ports:
         try:
             if port == 465:
                 context = ssl.create_default_context()
-                with socket.create_connection((mx_record, port), timeout=1.5) as sock:
-                    with context.wrap_socket(sock, server_hostname=mx_record):
+                with socket.create_connection((mx_record, port), timeout=smtp_timeout) as sock:
+                    with context.wrap_socket(sock, server_hostname=mx_record) as ssock:
                         return True
             else:
-                with socket.create_connection((mx_record, port), timeout=1.5) as sock:
-                    s = smtplib.SMTP()
-                    s.sock = sock
-                    s.file = s.sock.makefile("rb")
-                    code, _ = s.getreply()
-                    if code != 220:
-                        continue
-                    s.helo()
-                    if s.has_extn("starttls"):
-                        s.starttls()
-                    s.quit()
-                    return True
+                with socket.create_connection((mx_record, port), timeout=smtp_timeout) as sock:
+                    server = smtplib.SMTP(timeout=smtp_timeout)
+                    server.sock = sock
+                    try:
+                        code, _ = server.connect(mx_record, port)
+                        if code == 220:
+                            server.ehlo()
+                            if server.has_extn("starttls"):
+                                context = ssl.create_default_context()
+                                server.starttls(context=context)
+                                server.ehlo()
+                            server.quit()
+                            return True
+                    except Exception as e:
+                        print(f"SMTP connection error on port {port}: {str(e)}")
+                    finally:
+                        try:
+                            server.close()
+                        except:
+                            pass
         except Exception as e:
-            print("testing code erroe", e)
+            print(f"Socket connection error on port {port}: {str(e)}")
             continue
+
+    # Try direct domain connection as last resort
     try:
-        with socket.create_connection((domain, 25), timeout=1.5):
+        with socket.create_connection((domain, 25), timeout=smtp_timeout):
             return True
-    except:
+    except Exception as e:
+        print(f"Direct domain connection error: {str(e)}")
         return False
 
 
@@ -242,34 +256,68 @@ def perform_email_checks(target_email: str, sender_email: str, disposable_domain
 
     smtp_provider = get_smtp_provider(domain)
 
+    # Special handling for major providers that block SMTP verification
+    TRUSTED_DOMAINS = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "aol.com", "icloud.com"}
+    if domain in TRUSTED_DOMAINS:
+        mx_record, implicit_mx = get_mx_record(domain)
+        if mx_record:
+            return True, "Valid email for trusted provider", True, None
+
     mx_record, implicit_mx = get_mx_record(domain)
     if not mx_record:
         return False, f"Domain '{domain}' has no valid MX records", False, "MX lookup failed"
 
     smtp_accessible = verify_smtp_server(mx_record, domain)
+    if not smtp_accessible:
+        return False, f"SMTP server for '{domain}' is not accessible", False, "SMTP connection failed"
 
-    reachability_result = check_email_reachability(target_email, sender_email, disposable_domains)
+    try:
+        server = smtplib.SMTP(timeout=10)  # Increased timeout
+        server.set_debuglevel(0)
+        
+        # Try connecting with increased timeout
+        try:
+            server.connect(mx_record, 25)
+        except (socket.timeout, smtplib.SMTPServerDisconnected):
+            # Retry once with longer timeout
+            server = smtplib.SMTP(timeout=15)
+            server.connect(mx_record, 25)
+        
+        server.ehlo_or_helo_if_needed()
 
-    if isinstance(reachability_result, tuple):
-        is_deliverable = reachability_result[0]
-        validation_reason = reachability_result[1]
-    else:
-        is_deliverable = reachability_result
-        validation_reason = "Reachability check completed."
+        if server.has_extn("STARTTLS"):
+            context = ssl.create_default_context()
+            server.starttls(context=context)
+            server.ehlo()
 
-    if is_deliverable:
-        is_valid = smtp_accessible
-        smtp_reason = "SMTP verification passed"
-    elif smtp_provider in {"Google", "Yahoo", "Microsoft"} and smtp_accessible:
-        is_valid = True
-        smtp_reason = "Trusted provider overrides undeliverable status"
-        validation_reason = f"{smtp_provider} blocks RCPT checks but MX exists"
-    else:
-        is_valid = False
-        smtp_reason = "SMTP verification failed"
-        validation_reason = "SMTP unreachable or email not deliverable"
-
-    return is_deliverable, smtp_reason, is_valid, validation_reason
+        server.mail(sender_email)
+        
+        try:
+            code, message = server.rcpt(target_email)
+            message_str = message.decode("utf-8", "ignore") if hasattr(message, "decode") else str(message)
+            
+            if code == 250:
+                return True, "Valid email", True, None
+            elif code == 421:  # Timeout response
+                return True, "Timeout but likely valid", True, "Server timeout"
+            else:
+                return False, f"Invalid: SMTP Error {code} - {message_str}", False, message_str
+                
+        except smtplib.SMTPServerDisconnected:
+            # If server disconnects during RCPT, treat as timeout
+            return True, "Server disconnected but likely valid", True, "Server disconnected"
+            
+    except Exception as e:
+        error_str = str(e).lower()
+        if "timeout" in error_str or "timed out" in error_str:
+            # Treat timeouts as potential valid emails
+            return True, "Timeout but likely valid", True, "Connection timeout"
+        return False, f"SMTP verification failed: {str(e)}", False, str(e)
+    finally:
+        try:
+            server.quit()
+        except:
+            pass
 
 
 def evaluate_email_score_and_risk(
