@@ -84,24 +84,101 @@ def load_disposable_domains(file_path="disposed_email.conf"):
         return set(["mailinator.com", "tempmail.com", "fakeinbox.com"])
 
 
-def validate_email_syntax(email):
-    pattern = r"^[a-zA-Z0-8._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-    return bool(re.match(pattern, email))
+def validate_email_syntax(email: str) -> bool:
+    """
+    Validates email syntax according to RFC 5322 standards.
+    
+    Args:
+        email: The email address to validate
+        
+    Returns:
+        bool: True if the email syntax is valid, False otherwise
+    """
+    if not email or not isinstance(email, str):
+        return False
+        
+    # Basic length check
+    if len(email) > 254:  # Maximum length of email address
+        return False
+        
+    # Split local and domain parts
+    try:
+        local_part, domain = email.rsplit('@', 1)
+    except ValueError:
+        return False
+        
+    # Local part checks
+    if not local_part or len(local_part) > 64:  # Maximum length of local part
+        return False
+        
+    # Check for consecutive dots
+    if '..' in local_part or '..' in domain:
+        return False
+        
+    # Check for leading/trailing dots
+    if local_part.startswith('.') or local_part.endswith('.'):
+        return False
+        
+    # Domain checks
+    if not domain or len(domain) > 255:  # Maximum length of domain
+        return False
+        
+    # Check domain format (including IDN domains)
+    domain_parts = domain.split('.')
+    if len(domain_parts) < 2:  # Must have at least one dot
+        return False
+        
+    for part in domain_parts:
+        if not part or len(part) > 63:  # Maximum length of each domain part
+            return False
+        if part.startswith('-') or part.endswith('-'):  # Hyphens at start/end not allowed
+            return False
+            
+    # Comprehensive pattern for local part and domain
+    local_pattern = r'^[a-zA-Z0-9!#$%&\'*+\-/=?^_`{|}~.]+$'  # RFC 5322 compliant
+    domain_pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$'  # RFC 1035 compliant
+    
+    # Check local part characters
+    if not re.match(local_pattern, local_part):
+        return False
+        
+    # Check each domain part
+    for part in domain_parts:
+        if not re.match(domain_pattern, part):
+            return False
+            
+    return True
 
 
 def get_mx_record(domain):
     try:
+        # Extract domain if an email address is passed
+        if '@' in domain:
+            domain = domain.split('@')[1]
+        
+        # Clean the domain
+        domain = domain.strip().lower()
+        
         resolver = dns.resolver.Resolver()
-        resolver.timeout = 3  # Increased from 1
-        resolver.lifetime = 5  # Increased from 3
+        resolver.timeout = 3
+        resolver.lifetime = 5
         records = resolver.resolve(domain, "MX")
         if records:
-            mx_records = sorted([(r.preference, r.exchange.to_text()) for r in records], key=lambda x: x[0])
+            mx_records = sorted([(r.preference, r.exchange.to_text().rstrip('.')) for r in records], key=lambda x: x[0])
             mx_record = mx_records[0][1]
             return mx_record, False  # False = not implicit MX
         return None, True  # Implicit MX
+    except dns.resolver.NXDOMAIN:
+        print(f"Domain does not exist: {domain}")
+        return None, True
+    except dns.resolver.NoAnswer:
+        print(f"No MX records found for domain: {domain}")
+        return None, True
+    except dns.resolver.Timeout:
+        print(f"DNS lookup timeout for domain: {domain}")
+        return None, True
     except Exception as e:
-        print(f"MX lookup error for {domain}: {str(e)}")
+        print(f"MX lookup error for domain {domain}: {str(e)}")
         return None, True  # No record found or error = implicit MX
 
 
