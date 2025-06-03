@@ -71,7 +71,7 @@ async def create_single_email(
 def get_test_email_status(test_id: str, db: Session = Depends(get_db), user: UserID = Depends(get_current_user)):
     task = test_email_status_cache.get(test_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Test status not found")
+        raise HTTPException(status_code=404, detail="Task status not found")
 
     if task["status"] == "completed":
         email = db.query(TestEmail).filter(TestEmail.id == task["email_id"]).first()
