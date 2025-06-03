@@ -20,9 +20,9 @@ from app.schemas.email import (
     SimpleEmailCheckRequest,
     TestEmailBase,
 )
-from app.utils.cache import bulk_email_status_cache
-from app.utils.cache import copy_paste_email_status_cache as cache
-from app.utils.cache import test_email_status_cache
+
+# from app.utils.cache import copy_paste_email_status_cache as cache
+from app.utils.cache import bulk_email_status_cache, test_email_status_cache
 from app.utils.mail_utils import (
     evaluate_email_score_and_risk,
     get_mx_record,
@@ -31,6 +31,7 @@ from app.utils.mail_utils import (
     perform_email_checks,
     validate_email_syntax,
 )
+from app.utils.redis_helper_cache import update_task_status
 
 
 class EmailService:
@@ -504,16 +505,26 @@ class EmailService:
             bulk_email.status = "Completed"
             self.db.commit()
 
-            cache[task_id] = {
-                "status": "completed",
-                "message": "Emails validated successfully",
-                "data": result,
-            }
+            #     cache[task_id] = {
+            #         "status": "completed",
+            #         "message": "Emails validated successfully",
+            #         "data": result,
+            #     }
+            # except Exception as e:
+            #     cache[task_id] = {
+            #         "status": "failed",
+            #         "error": str(e),
+            #     }
+            # ✅ Update Redis status to completed
+            update_task_status(
+                task_id, {"status": "completed", "message": "Validation completed successfully.", "data": result}
+            )
+
         except Exception as e:
-            cache[task_id] = {
-                "status": "failed",
-                "error": str(e),
-            }
+            # ✅ Update Redis status to failed
+            update_task_status(task_id, {"status": "failed", "error": str(e)})
+            self.db.rollback()
+            raise
 
     async def copy_past_emails(
         self,

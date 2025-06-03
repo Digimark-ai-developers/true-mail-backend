@@ -28,13 +28,13 @@ from app.schemas.email import (  # Import your Pydantic models
 )
 from app.schemas.user import UserInfo
 from app.services.email_service import EmailService
-from app.utils.cache import (
+from app.utils.cache import (  # copy_paste_email_status_cache,
     bulk_email_status_cache,
-    copy_paste_email_status_cache,
     test_email_status_cache,
 )
 from app.utils.jwt_handler import get_current_user
 from app.utils.mail_utils import load_disposable_domains
+from app.utils.redis_helper_cache import get_task_status, set_task_status
 
 router = APIRouter(prefix="/email", tags=["Email Validation Functions"])
 
@@ -208,6 +208,69 @@ def get_bulk_email_status(task_id: str, user: UserID = Depends(get_current_user)
     return {"status": 202, "message": "Still processing...", "task_id": task_id, "data": None}
 
 
+# @router.post(
+#     "/copy_paste_email",
+#     summary="Validate multiple emails from pasted input",
+# )
+# async def copy_paste_email_start(
+#     payload: BulkEmailStatsCreateWithEmails,
+#     background_tasks: BackgroundTasks,
+#     db: Session = Depends(get_db),
+#     user: UserID = Depends(get_current_user),
+# ):
+#     task_id = str(uuid.uuid4())
+#     copy_paste_email_status_cache[task_id] = {"status": "processing"}
+
+#     service = EmailService(db)
+#     background_tasks.add_task(
+#         service.copy_paste_emails_background,
+#         user_id=user.user_Id,
+#         emails=payload.test_emails,
+#         task_id=task_id,
+#         file_name=payload.file_name,
+#     )
+
+#     return BulkEmailStatsWrapper(
+#         message="Email validation started. Check back shortly.",
+#         status=status.HTTP_202_ACCEPTED,
+#         task_id=task_id,
+#         data=None,
+#     )
+
+
+# @router.get(
+#     "/copy_paste_email_status/{task_id}",
+#     summary="Check status of pasted email validation",
+#     response_model=BulkEmailStatsWrapper,
+# )
+# def get_copy_paste_email_status(
+#     task_id: str,
+#     db: Session = Depends(get_db),
+#     user: UserID = Depends(get_current_user),
+# ):
+#     task = copy_paste_email_status_cache.get(task_id)
+#     if not task:
+#         raise HTTPException(status_code=404, detail="Validation status not found")
+
+#     if task["status"] == "completed":
+#         return BulkEmailStatsWrapper(
+#             message=task["message"],
+#             status=status.HTTP_200_OK,
+#             task_id=task_id,
+#             data=task["data"].model_dump(),  # ✅ convert to dict
+#         )
+
+#     elif task["status"] == "failed":
+#         raise HTTPException(status_code=500, detail=task["error"])
+
+#     return BulkEmailStatsWrapper(
+#         message="Still working...",
+#         status=status.HTTP_202_ACCEPTED,
+#         task_id=task_id,
+#         data=None,
+#     )
+
+
 @router.post(
     "/copy_paste_email",
     summary="Validate multiple emails from pasted input",
@@ -219,11 +282,17 @@ async def copy_paste_email_start(
     user: UserID = Depends(get_current_user),
 ):
     task_id = str(uuid.uuid4())
-    copy_paste_email_status_cache[task_id] = {"status": "processing"}
+
+    # Store task status in Redis or fallback
+    set_task_status(task_id, {"status": "processing"})
 
     service = EmailService(db)
     background_tasks.add_task(
-        service.copy_paste_emails_background, user.user_Id, payload.test_emails, task_id, payload.file_name
+        service.copy_paste_emails_background,
+        user.user_Id,
+        payload.test_emails,
+        task_id,
+        payload.file_name,
     )
 
     return BulkEmailStatsWrapper(
@@ -244,7 +313,7 @@ def get_copy_paste_email_status(
     db: Session = Depends(get_db),
     user: UserID = Depends(get_current_user),
 ):
-    task = copy_paste_email_status_cache.get(task_id)
+    task = get_task_status(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Validation status not found")
 
@@ -253,7 +322,7 @@ def get_copy_paste_email_status(
             message=task["message"],
             status=status.HTTP_200_OK,
             task_id=task_id,
-            data=task["data"].model_dump(),  # ✅ convert to dict
+            data=task["data"],
         )
 
     elif task["status"] == "failed":
