@@ -517,7 +517,8 @@ class EmailService:
             #     }
             # ✅ Update Redis status to completed
             update_task_status(
-                task_id, {"status": "completed", "message": "Validation completed successfully.", "data": result}
+                task_id,
+                {"status": "completed", "message": "Validation completed successfully.", "data": result.model_dump()},
             )
 
         except Exception as e:

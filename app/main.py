@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from firebase_admin import credentials, initialize_app
 
 # from app.middlewares.auth_middleware import AuthMiddleware
 from app.database.db_config import create_database  # Import create_database function
@@ -13,6 +14,9 @@ async def lifespan(app: FastAPI):
     # Code to execute during application startup
     print("Application is starting up...")
     create_database()  # Call the function to create the database and tables
+    # Initialize Firebase Admin SDK here:
+    cred = credentials.Certificate("app/firebase-service-account.json")
+    initialize_app(cred)
 
     yield  # Application is running here
     # Code to execute during application shutdown
