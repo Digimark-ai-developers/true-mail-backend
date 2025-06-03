@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-
+from jwt import ExpiredSignatureError, InvalidTokenError
 from app.schemas.auth import UserInfo
 from app.utils.firebase import verify_firebase_token
 
@@ -25,22 +25,24 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> UserInfo:
     try:
-        id_token = credentials.credentials
-        decoded_token = verify_firebase_token(id_token)  # Verifies with Firebase
+        token = credentials.credentials
+        decoded_token = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
 
         return UserInfo(
             user_Id=decoded_token.get("uid"),
             email=decoded_token.get("email"),
             first_name=decoded_token.get("name", ""),
-            last_name="",  # Firebase doesn't provide separate last name
+            last_name="",  # still optional
             photoURL=decoded_token.get("picture", ""),
         )
 
-    except Exception as err:
-        print("Firebase token verification failed:", err)
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid Firebase token",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired",
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )

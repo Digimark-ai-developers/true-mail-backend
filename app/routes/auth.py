@@ -95,15 +95,12 @@ def login_user(email: str = Body(...), password: str = Body(...), db: Session = 
         }
     """
     auth_service = AuthService(db)
-
-    firebase_id_token = auth_service.login_with_email_password(email, password)  # ✅ unpack here
-
-    # token = create_jwt_token({"user_Id": user.user_id})  # ✅ user is now the correct object
+    firebase_id_token = auth_service.login_with_email_password(email, password)
 
     return {
         "message": "Login successful",
         "status_code": status.HTTP_200_OK,
-        "firebase_id_token": firebase_id_token,  # optional: include if you need it
+        "firebase_id_token": firebase_id_token,
     }
 
 
@@ -153,13 +150,13 @@ def auth_google(code: str, db: Session = Depends(get_db)):
         user_info, google_id_token = auth_service.exchange_code_for_token(code)
 
         # Log in with Firebase using Google id_token
-        firebase_id_token, firebase_uid = auth_service.login_with_google_user_info(google_id_token)
+        custom_token, firebase_uid = auth_service.login_with_google_user_info(google_id_token)
         auth_service.get_or_create_user(user_info, firebase_uid=firebase_uid)
 
         # Redirect to frontend with token and user data
         params = urlencode(
             {
-                "token": firebase_id_token,
+                "token": custom_token,
             }
         )
         frontend_redirect = f"https://true-mail-frontend.vercel.app/home?{params}"
@@ -183,13 +180,19 @@ def auth_facebook(code: str, db: Session = Depends(get_db)):
     try:
         auth_service = AuthService(db)
         user_info, fb_access_token = auth_service.exchange_code_for_facebook_token(code)
+
+        # ✅ Clean up token (remove trailing fragment if present)
+        fb_access_token = fb_access_token.split('#')[0]
+
         firebase_id_token, firebase_uid = auth_service.login_with_facebook_token(fb_access_token)
         auth_service.get_or_create_user(user_info, firebase_uid=firebase_uid)
 
         params = urlencode({"token": firebase_id_token})
+
         return RedirectResponse(f"https://true-mail-frontend.vercel.app/home?{params}")
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
 
 
 @router.get("/login_github")

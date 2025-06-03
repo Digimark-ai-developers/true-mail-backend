@@ -47,7 +47,7 @@ class EmailService:
                 raise HTTPException(status_code=403, detail="Insufficient credits to test email")
 
             credit.remaining_credits -= 1
-            credit.total_credits -= 1
+            # credit.total_credits -= 1
             credit.last_updated = datetime.utcnow()
             self.db.add(credit)
 
@@ -351,7 +351,7 @@ class EmailService:
             self.db.add(test_email)
 
         credit.remaining_credits -= total_emails
-        credit.total_credits -= total_emails
+        # credit.total_credits -= total_emails
         credit.last_updated = now
         self.db.add(credit)
 

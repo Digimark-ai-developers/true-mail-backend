@@ -12,6 +12,7 @@ from app.utils.email_service import send_email_with_link
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 import os
+from app.utils.jwt_handler import create_jwt_token  # import your custom JWT creator
 
 load_dotenv()
 
@@ -91,17 +92,14 @@ class AuthService:
             raise e  # just re-raise the exception
 
     def login_with_email_password(self, email: str, password: str) -> str:
-        # Step 1: Check if user exists in Firebase
         try:
             firebase_user = firebase_auth.get_user_by_email(email)
         except UserNotFoundError:
             raise HTTPException(status_code=404, detail="User does not exist. Please register first.")
 
-        # Step 2: Check if email is verified
         if not firebase_user.email_verified:
             raise HTTPException(status_code=403, detail="Email is not verified")
 
-        # Step 3: Proceed to login with email/password
         fire_base_api_key = os.getenv("FIREBASE_API_KEY")
         url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={fire_base_api_key}"
 
@@ -116,7 +114,16 @@ class AuthService:
             raise HTTPException(status_code=401, detail="Invalid email or password")
 
         data = response.json()
-        return data["idToken"]
+
+        # Extract user info for your custom JWT
+        user_info = {
+            "uid": firebase_user.uid,
+            "email": firebase_user.email,
+            "name": firebase_user.display_name or "",
+            "picture": firebase_user.photo_url or "",
+        }
+
+        return create_jwt_token(user_info)
 
     def get_google_oauth_url(self):
 
@@ -204,7 +211,17 @@ class AuthService:
             raise HTTPException(status_code=401, detail=f"Facebook sign-in failed: {error_detail}")
 
         data = response.json()
-        return data["idToken"], data["localId"]
+        firebase_uid = data["localId"]
+
+        custom_token = create_jwt_token({
+            "uid": firebase_uid,
+            "email": data.get("email", ""),
+            "name": data.get("displayName", ""),
+            "picture": data.get("photoUrl", ""),
+        })
+
+        return custom_token, firebase_uid
+
 
     def get_or_create_user(self, user_info: dict, firebase_uid: str = None):
         email = user_info.get("email")
@@ -257,7 +274,11 @@ class AuthService:
         firebase_api_key = os.getenv("FIREBASE_API_KEY")
         url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={firebase_api_key}"
 
-        payload = {"postBody": f"id_token={id_token}&providerId={provider_id}", "requestUri": GOOGLE_REDIRECT_URI, "returnSecureToken": True}
+        payload = {
+            "postBody": f"id_token={id_token}&providerId={provider_id}",
+            "requestUri": GOOGLE_REDIRECT_URI,
+            "returnSecureToken": True,
+        }
 
         response = requests.post(url, json=payload)
         if response.status_code != 200:
@@ -265,7 +286,18 @@ class AuthService:
             raise HTTPException(status_code=401, detail=f"Google sign-in failed: {error_detail}")
 
         data = response.json()
-        return data["idToken"], data["localId"]  # ✅ return UID too
+        firebase_uid = data["localId"]
+
+        # 🔐 Create your custom JWT
+        custom_token = create_jwt_token({
+            "uid": firebase_uid,
+            "email": data.get("email", ""),
+            "name": data.get("displayName", ""),
+            "picture": data.get("photoUrl", ""),
+        })
+
+        return custom_token, firebase_uid
+
 
     def get_github_oauth_url(self):
         return (
