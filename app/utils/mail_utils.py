@@ -20,7 +20,7 @@ RETRY_DELAY = 60  # seconds
 GLOBAL_MAX_CALLS = 100  # Max global calls
 GLOBAL_PERIOD = 60  # per 60 seconds
 DOMAIN_MAX_CALLS = 5
-DOMAIN_PERIOD = 60
+DOMAIN_PERIOD = 30
 
 # Configure DNS resolver
 resolver = dns.resolver.Resolver(configure=False)
@@ -127,7 +127,7 @@ def verify_smtp_server(mx_record, domain):
                     s.quit()
                     return True
         except Exception as e:
-            print(f"An error occurred: {e}")
+            print("testing code erroe", e)
             continue
     try:
         with socket.create_connection((domain, 25), timeout=1.5):
@@ -165,7 +165,8 @@ def check_email_reachability(email, sender_email, disposable_domains):
         symbols = len(email) - alphabetic - numeric
         return {"alphabetic": alphabetic, "numeric": numeric, "symbols": symbols}
 
-    # result = analyze_string(email)
+    result = analyze_string(email)
+    print(" start checking your email...\n", result)
 
     if not validate_email_syntax(email):
         return False, "Invalid email syntax"
@@ -185,6 +186,7 @@ def check_email_reachability(email, sender_email, disposable_domains):
         dm_info["registrar"] = getattr(whois_data, "registrar", "N/A")
         dm_info["country"] = getattr(whois_data, "country", "N/A")
         dm_info["whois_server"] = getattr(whois_data, "whois_server", "N/A")
+
     except Exception as e:
         dm_info = {"error": f"WHOIS lookup failed: {str(e)}"}
 
