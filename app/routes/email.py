@@ -237,23 +237,40 @@ def get_copy_paste_email_status(
     db: Session = Depends(get_db),
     user: UserID = Depends(get_current_user),
 ):
+    # First check the cache for task status
     task = copy_paste_email_status_cache.get(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Validation status not found")
 
-    if task["status"] == "completed":
+    # If task is still processing, return immediately
+    if task["status"] == "processing":
         return BulkEmailStatsWrapper(
-            message=task["message"],
-            status=status.HTTP_200_OK,
+            message="Still processing...",
+            status=status.HTTP_202_ACCEPTED,
             task_id=task_id,
-            data=task["data"].model_dump(),  # ✅ convert to dict
+            data=None,
         )
 
-    elif task["status"] == "failed":
+    # If task failed, return error
+    if task["status"] == "failed":
         raise HTTPException(status_code=500, detail=task["error"])
 
+    # If completed, return cached data
+    if task["status"] == "completed":
+        try:
+            return BulkEmailStatsWrapper(
+                message=task["message"],
+                status=status.HTTP_200_OK,
+                task_id=task_id,
+                data=task["data"].model_dump() if hasattr(task["data"], 'model_dump') else task["data"],
+            )
+        except Exception as e:
+            # If there's an error processing the completed data, return error
+            raise HTTPException(status_code=500, detail=f"Error processing completed data: {str(e)}")
+
+    # Fallback response for unexpected status
     return BulkEmailStatsWrapper(
-        message="Still working...",
+        message="Unknown status",
         status=status.HTTP_202_ACCEPTED,
         task_id=task_id,
         data=None,

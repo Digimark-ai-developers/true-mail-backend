@@ -28,6 +28,7 @@ from app.utils.mail_utils import (
 )
 from app.utils.cache import test_email_status_cache, bulk_email_status_cache
 from app.utils.cache import copy_paste_email_status_cache as cache
+from app.utils.parallel_processor import *
 
 
 class EmailService:
@@ -465,25 +466,66 @@ class EmailService:
         file_name: str = None,
     ):
         try:
-            result = await self.copy_past_emails(user_id=user_id, emails=emails, file_name=file_name)
+            # Update cache with initial processing status
+            cache[task_id] = {
+                "status": "processing",
+                "message": "Starting email validation...",
+                "progress": 0,
+                "total": len(emails)
+            }
+
+            # Process emails with progress updates
+            result = await self.copy_past_emails(
+                user_id=user_id,
+                emails=emails,
+                file_name=file_name,
+                task_id=task_id  # Pass task_id to update progress
+            )
+
+            # Update bulk email status
             bulk_email = self.db.query(BulkEmailStats).filter(
                 BulkEmailStats.id == result.file_id,
                 BulkEmailStats.user_id == user_id
             ).first()
-            bulk_email.status = "Completed"
-            self.db.commit()
+            
+            if bulk_email:
+                bulk_email.status = "Completed"
+                try:
+                    self.db.commit()
+                except Exception as e:
+                    self.db.rollback()
+                    raise Exception(f"Failed to update bulk email status: {str(e)}")
 
-
+            # Cache the final result
             cache[task_id] = {
                 "status": "completed",
                 "message": "Emails validated successfully",
                 "data": result,
+                "progress": 100
             }
+
         except Exception as e:
+            # Log the error for debugging
+            print(f"Error in copy_paste_emails_background: {str(e)}")
+            
+            # Update cache with error status
             cache[task_id] = {
                 "status": "failed",
                 "error": str(e),
+                "message": "Email validation failed"
             }
+            
+            # Try to update bulk email status if it exists
+            try:
+                bulk_email = self.db.query(BulkEmailStats).filter(
+                    BulkEmailStats.user_id == user_id
+                ).order_by(BulkEmailStats.created_at.desc()).first()
+                
+                if bulk_email:
+                    bulk_email.status = "Failed"
+                    self.db.commit()
+            except Exception:
+                pass  # Ignore errors in error handling
 
     async def copy_past_emails(
         self,
@@ -491,7 +533,11 @@ class EmailService:
         emails: List[str],
         sender_email: str = "test@example.com",
         file_name: str = None,
+        task_id: str = None
     ) -> BulkEmailStatsResponseWithEmails:
+        from app.utils.parallel_processor import process_emails_optimized
+        
+        # Initial validation
         user = self.db.query(User).filter(User.user_id == user_id).first()
         if not user:
             raise HTTPException(status_code=400, detail="User ID not found")
@@ -499,14 +545,9 @@ class EmailService:
         credit = self.db.query(Credit).filter(Credit.user_id == user_id).first()
         if not credit or credit.remaining_credits < 1:
             raise HTTPException(status_code=403, detail="Insufficient credits to validate emails")
-        
-
-
-        disposable_domains = load_disposable_domains()
 
         # Clean and filter emails
         cleaned_emails = [email.strip().lower() for email in emails if email.strip()]
-
         if not cleaned_emails:
             raise HTTPException(status_code=400, detail="No valid emails found")
 
@@ -515,12 +556,14 @@ class EmailService:
         duplicate_count = total_emails - len(unique_emails)
 
         if credit.remaining_credits < len(cleaned_emails):
-
             raise HTTPException(status_code=403, detail="Insufficient credits")
+
         now = datetime.now(timezone.utc)
+        
+        # Create initial bulk stats record
         bulk_stat = BulkEmailStats(
             user_id=user_id,
-            file_name=file_name,  # Using a default filename
+            file_name=file_name,
             duplicate_email=duplicate_count,
             total_valid_emails=0,
             deliverable=0,
@@ -530,188 +573,103 @@ class EmailService:
             created_at=now,
             soft_delete=False,
         )
+        
         try:
             self.db.add(bulk_stat)
             self.db.flush()
-            self.db.commit()
-
             bulk_id = bulk_stat.id
+            self.db.commit()
         except Exception as e:
-            raise HTTPException(status_code=500, detail="Internal Server Error")
+            self.db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to create bulk stats record: {str(e)}")
 
+        # Load disposable domains
+        disposable_domains = load_disposable_domains()
+        
+        # Progress callback
+        async def update_progress(progress: int, processed: int, total: int):
+            if task_id:
+                cache[task_id].update({
+                    "status": "processing",
+                    "message": f"Processed {processed} of {total} emails...",
+                    "progress": progress
+                })
 
-
-
-        total_valid = 0
-        risky_count = 0
-        deliverable_count = 0
-
-        test_email_objs = []
-
-        for email in cleaned_emails:
-            is_syntax_valid = validate_email_syntax(email)
-            mx_record_result = get_mx_record(email)
-            mx_record = mx_record_result[0] if mx_record_result else None
-            implicit_mx = mx_record_result[1] if mx_record_result and len(mx_record_result) > 1 else None
-
-            smtp_deliverable, smtp_reason, is_valid, validation_reason = perform_email_checks(
-                target_email=email, sender_email=sender_email, disposable_domains=disposable_domains
+        try:
+            # Process emails with optimized processor
+            results = await process_emails_optimized(
+                emails=cleaned_emails,
+                disposable_domains=disposable_domains,
+                chunk_size=50,
+                progress_callback=update_progress
             )
 
-            domain = email.split("@",1)[-1].lower()
-            is_disposable = int(domain in disposable_domains)
+            # Calculate statistics
+            total_valid = sum(1 for r in results if r["is_valid"])
+            deliverable_count = sum(1 for r in results if r["is_deliverable"])
+            risky_count = sum(1 for r in results if r["is_risky"])
+            deliverable_percent = (deliverable_count / total_emails) * 100 if total_emails else 0
 
-            match = re.search(r"@([a-zA-Z0-9.-]+)", email)
-            domain_name = match.group(1) if match else "unknown"
-
-            local_part = re.sub(r"[^a-zA-Z._-]", "", email.split("@",1)[0])
-            cleaned_name = re.sub(r"[\\._-]+", " ", local_part).strip()
-            full_name = " ".join(part.capitalize() for part in cleaned_name.split()) or "N/A"
-
-            alphabetical_count = sum(c.isalpha() for c in email)
-            numerical_count = sum(c.isdigit() for c in email)
-            unicode_symbol_count = len(email) - alphabetical_count - numerical_count
-
-            has_role = any(role in email for role in ["admin", "info", "support", "sales", "contact"])
-            is_accept_all = "accept" in email or "all" in email
-            has_no_reply = "no-reply" in email or "noreply" in email
-
-            smtp_provider = get_smtp_provider(domain)
-
-            score, is_risky, tags = evaluate_email_score_and_risk(
-                is_syntax_valid=is_syntax_valid,
-                smtp_deliverable=smtp_deliverable,
-                is_disposable=bool(is_disposable),
-                has_role=has_role,
-                is_accept_all=is_accept_all,
-                has_no_reply=has_no_reply,
-                domain=domain,
-                mx_record=mx_record,
-                smtp_provider=smtp_provider,
-            )
-
-            is_email_valid = is_syntax_valid and smtp_deliverable
-            status = "valid" if is_email_valid else "invalid"
-
-            if is_email_valid:
-                total_valid += 1
-                deliverable_count += 1
-            if is_risky:
-                risky_count += 1
-
-            test_email_obj = TestEmail(
-                user_id=user_id,
-                file_id=None,
-                user_tested_email=email,
-                full_name=full_name,
-                gender="Unknown",
-                status=status,
-                reason=validation_reason or smtp_reason,
-                domain=domain_name,
-                is_free=False,
-                is_risky=is_risky,
-                is_valid=is_email_valid,
-                is_disposable=is_disposable,
-                is_deliverable=smtp_deliverable,
-                has_tag=False,
-                alphabetical_characters=alphabetical_count,
-                is_mailbox_full=False,
-                has_role=has_role,
-                is_accept_all=is_accept_all,
-                has_numerical_characters=numerical_count,
-                has_unicode_symbols=unicode_symbol_count,
-                has_no_reply=has_no_reply,
-                smtp_provider=smtp_provider,
-                mx_record=mx_record or "",
-                implicit_mx_record=implicit_mx,
-                score=score,
-                soft_delete=False,
-                created_at=now,
-            )
-            test_email_objs.append(test_email_obj)
-
-        deliverable_percent = (deliverable_count / total_emails) * 100 if total_emails else 0
-
-
-        bulk_email = self.db.query(BulkEmailStats).filter(
+            # Update bulk email stats
+            bulk_email = self.db.query(BulkEmailStats).filter(
                 BulkEmailStats.id == bulk_id,
                 BulkEmailStats.user_id == user_id
             ).first()
-        bulk_email.total_valid_emails = total_valid,
-        bulk_email.deliverable = deliverable_percent,
-        bulk_email.risky = risky_count,
-        self.db.commit()
-        # bulk_stat = BulkEmailStats(
-        #     user_id=user_id,
-        #     file_name=file_name,  # Using a default filename
-        #     duplicate_email=duplicate_count,
-        #     total_valid_emails=total_valid,
-        #     deliverable=deliverable_percent,
-        #     risky=risky_count,
-        #     status="In-Progress",
-        #     total=total_emails,
-        #     created_at=now,
-        #     soft_delete=False,
-        # )
-        # self.db.add(bulk_stat)
-        # self.db.flush()
+            
+            if bulk_email:
+                bulk_email.total_valid_emails = total_valid
+                bulk_email.deliverable = deliverable_percent
+                bulk_email.risky = risky_count
+                bulk_email.status = "Completed"
 
-        for test_email in test_email_objs:
-            test_email.file_id = bulk_stat.id
-            self.db.add(test_email)
+            # Update credits
+            credit.remaining_credits -= total_emails
+            credit.last_updated = now
 
-        credit.remaining_credits -= total_emails
-        # credit.total_credits -= total_emails
-        credit.last_updated = now
-        self.db.add(credit)
+            # Create TestEmail objects and save in batches
+            test_email_objs = []
+            for result in results:
+                test_email_obj = TestEmail(
+                    user_id=user_id,
+                    file_id=bulk_id,
+                    created_at=now,
+                    soft_delete=False,
+                    **result
+                )
+                test_email_objs.append(test_email_obj)
 
-        credit_used = CreditUsage(
-            user_id=user_id,
-            email_or_file_id=bulk_stat.id,
-            quantity_used=total_emails,
-            credits_used=total_emails,
-            created_at=now,
-        )
-        self.db.add(credit_used)
-
-        try:
-            self.db.commit()
-            return BulkEmailStatsResponseWithEmails(
+            # Record credit usage
+            credit_used = CreditUsage(
                 user_id=user_id,
-                file_id=bulk_stat.id,
-                file_name=file_name,
-                test_emails=[
-                    TestEmailBase(
-                        user_tested_email=e.user_tested_email,
-                        full_name=e.full_name,
-                        gender=e.gender,
-                        status=e.status,
-                        reason=e.reason,
-                        domain=e.domain,
-                        is_free=e.is_free,
-                        is_risky=e.is_risky,
-                        is_valid=e.is_valid,
-                        is_disposable=e.is_disposable,
-                        is_deliverable=e.is_deliverable,
-                        has_tag=e.has_tag,
-                        alphabetical_characters=e.alphabetical_characters,
-                        is_mailbox_full=e.is_mailbox_full,
-                        has_role=e.has_role,
-                        is_accept_all=e.is_accept_all,
-                        has_numerical_characters=e.has_numerical_characters,
-                        has_unicode_symbols=e.has_unicode_symbols,
-                        has_no_reply=e.has_no_reply,
-                        smtp_provider=e.smtp_provider,
-                        mx_record=e.mx_record,
-                        implicit_mx_record=e.implicit_mx_record,
-                        score=e.score,
-                    )
-                    for e in test_email_objs
-                ],
+                email_or_file_id=bulk_id,
+                quantity_used=total_emails,
+                credits_used=total_emails,
+                created_at=now,
             )
-        except IntegrityError:
+            self.db.add(credit_used)
+
+            # Save all changes in optimized batches
+            try:
+                # Save test email objects in smaller batches
+                BATCH_SIZE = 100
+                for i in range(0, len(test_email_objs), BATCH_SIZE):
+                    batch = test_email_objs[i:i + BATCH_SIZE]
+                    self.db.bulk_save_objects(batch)
+                    self.db.commit()
+
+                return BulkEmailStatsResponseWithEmails(
+                    user_id=user_id,
+                    file_id=bulk_stat.id,
+                    file_name=file_name,
+                    test_emails=[TestEmailBase.model_validate(obj.__dict__) for obj in test_email_objs],
+                )
+            except Exception as e:
+                self.db.rollback()
+                raise HTTPException(status_code=500, detail=f"Failed to save results: {str(e)}")
+
+        except Exception as e:
             self.db.rollback()
-            raise HTTPException(status_code=400, detail="Failed to save email records")
+            raise HTTPException(status_code=500, detail=f"Error during email processing: {str(e)}")
 
     def update_file_name_by_id(self, file_id: int, new_filename: str, user_id: str) -> str:
         db_filename = (
