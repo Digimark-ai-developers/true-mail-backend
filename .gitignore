@@ -69,6 +69,9 @@ db.sqlite3-journal
 instance/
 .webassets-cache
 
+# Firebase key
+/app/truemail-5a597-firebase-adminsdk-fbsvc-e22cde670f.json
+
 # Scrapy stuff:
 .scrapy
 

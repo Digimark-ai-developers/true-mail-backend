@@ -7,7 +7,6 @@ import socket
 import ssl
 from email.utils import parseaddr
 from typing import Optional
-import functools
 
 import dns.resolver
 import whois
@@ -30,8 +29,6 @@ def validate_email_syntax(email):
     return bool(re.match(pattern, email))
 
 
-
-@functools.lru_cache(maxsize=1024)
 def get_mx_record(domain):
     try:
         resolver = dns.resolver.Resolver()
@@ -48,10 +45,10 @@ def get_mx_record(domain):
 
 
 def verify_smtp_server(mx_record, domain):
-    ports = [25, 587, 465]
+    ports = [25, 2525, 587, 465] # for testing the original respose of the server if it is not working on 25 port or 2525
     for port in ports:
         try:
-            if port == 465:
+            if port == 465 and port == 587 or port == 2525:       # the original port was tha 465 i hussain testing it now 
                 context = ssl.create_default_context()
                 with socket.create_connection((mx_record, port), timeout=2) as sock:
                     with context.wrap_socket(sock, server_hostname=mx_record):
@@ -99,6 +96,7 @@ def check_email_reachability(email, sender_email, disposable_domains):
         return {"alphabetic": alphabetic, "numeric": numeric, "symbols": symbols}
 
     result = analyze_string(email)
+    print(result)  # Optional: Debugging output for analysis result
 
     # Step 1: Syntax Check
     if not validate_email_syntax(email):
@@ -135,6 +133,7 @@ def check_email_reachability(email, sender_email, disposable_domains):
         return False, f"SMTP server for '{domain}' is not accessible"
 
     # Step 7: Perform the SMTP verification process
+
     try:
         server = smtplib.SMTP(timeout=2)
         server.set_debuglevel(0)
@@ -161,10 +160,9 @@ def perform_email_checks(target_email: str, sender_email: str, disposable_domain
     try:
         domain = target_email.split("@")[1].lower()
     except IndexError:
-        return False, "Invalid email format", False, "Invalid email format"
+        return False, "Invalid email format", False, "Invalid email format" 
 
     smtp_provider = get_smtp_provider(domain)
-    trusted_providers = {"Google", "Yahoo", "Microsoft"}
 
     # Step 1: Perform MX Check (for safety before SMTP)
     mx_record, implicit_mx = get_mx_record(domain)
@@ -184,19 +182,24 @@ def perform_email_checks(target_email: str, sender_email: str, disposable_domain
         is_deliverable = reachability_result
         validation_reason = "Reachability check completed."
 
-    # Final verdict - allow fallback for trusted providers
+    # Final Verdict Logic
+
+    # If deliverable via SMTP RCPT check, trust it
     if is_deliverable:
-        is_valid = True
+        is_valid = smtp_accessible
         smtp_reason = "SMTP verification passed"
-    elif smtp_provider in trusted_providers and smtp_accessible:
-        is_valid = True
-        is_deliverable = True
-        validation_reason = f"Trusted provider ({smtp_provider}) - SMTP response"
-        smtp_reason = "SMTP access confirmed, but verification skipped for trusted provider"
+
+    elif smtp_provider in {"Google", "Yahoo", "Microsoft"} and smtp_accessible:
+       
+        is_valid = False  
+        smtp_reason = "Trusted provider but email not confirmed deliverable"
+        validation_reason = f"SMTP accessible for {smtp_provider}, but RCPT check failed"
+
     else:
         is_valid = False
         is_deliverable = False
         smtp_reason = "SMTP verification failed"
+        validation_reason = "SMTP unreachable or email not deliverable"
 
     return is_deliverable, smtp_reason, is_valid, validation_reason
 
@@ -214,6 +217,14 @@ def evaluate_email_score_and_risk(
 ):
     score = 0
     tags = []
+
+    if not is_syntax_valid or not smtp_deliverable:
+        if not is_syntax_valid:
+            tags.append("Invalid syntax")
+        if not smtp_deliverable:
+            tags.append("SMTP undeliverable")
+
+        return 0, True, tags
 
     # 1. Syntax check (10 points)
     if is_syntax_valid:
@@ -261,86 +272,3 @@ def evaluate_email_score_and_risk(
     is_risky = score < 60  # mark as risky if score is less than 60
 
     return score, is_risky, tags
-
-
-async def analyze_email(email: str, sender_email: str = "test@example.com"):
-    # Load disposable domain list
-    disposable_domains = load_disposable_domains()
-
-    # Validate syntax
-    is_syntax_valid = validate_email_syntax(email)
-
-    # Extract domain
-    email_domain = email.split("@")[-1].lower()
-    domain_name = email_domain.split(".")[0]
-    match = re.search(r"@([\w\-]+)\.", email)
-    domain_name = match.group(1) if match else domain_name
-
-    # Full name extraction
-    local_part = re.sub(r"[^a-zA-Z._-]", "", email.split("@")[0])
-    cleaned_name = re.sub(r"[\._-]+", " ", local_part).strip()
-    full_name = " ".join(part.capitalize() for part in cleaned_name.split()) or "N/A"
-
-    # MX Record
-    mx_record_result = get_mx_record(email)
-    mx_record = mx_record_result[0] if mx_record_result else ""
-    implicit_mx = mx_record_result[1] if mx_record_result and len(mx_record_result) > 1 else ""
-
-    # SMTP and validity
-    smtp_deliverable, smtp_reason, is_valid, validation_reason = perform_email_checks(
-        target_email=email, sender_email=sender_email, disposable_domains=disposable_domains
-    )
-
-    is_disposable = int(email_domain in disposable_domains)
-
-    # Character analysis
-    alphabetical_count = sum(c.isalpha() for c in email)
-    numerical_count = sum(c.isdigit() for c in email)
-    unicode_symbol_count = len(email) - alphabetical_count - numerical_count
-
-    # Tag detection
-    lower_email = email.lower()
-    has_role = any(role in lower_email for role in ["admin", "info", "support", "sales", "contact"])
-    is_accept_all = "accept" in lower_email or "all" in lower_email
-    has_no_reply = "no-reply" in lower_email or "noreply" in lower_email
-
-    # SMTP provider
-    try:
-        _, domain = email.split("@")
-    except ValueError:
-        domain = ""
-    smtp_provider = get_smtp_provider(domain)
-
-    # Scoring
-    score, is_risky, tags = evaluate_email_score_and_risk(
-        is_syntax_valid=is_syntax_valid,
-        smtp_deliverable=smtp_deliverable,
-        is_disposable=bool(is_disposable),
-        has_role=has_role,
-        is_accept_all=is_accept_all,
-        has_no_reply=has_no_reply,
-        domain=email_domain,
-        mx_record=mx_record,
-        smtp_provider=smtp_provider,
-    )
-
-    return {
-        "full_name": full_name,
-        "domain_name": domain_name,
-        "is_risky": is_risky,
-        "is_syntax_valid": is_syntax_valid,
-        "smtp_deliverable": smtp_deliverable,
-        "validation_reason": validation_reason,
-        "smtp_reason": smtp_reason,
-        "is_disposable": is_disposable,
-        "alphabetical_count": alphabetical_count,
-        "numerical_count": numerical_count,
-        "unicode_symbol_count": unicode_symbol_count,
-        "smtp_provider": smtp_provider,
-        "mx_record": mx_record,
-        "implicit_mx": implicit_mx,
-        "score": score,
-        "has_role": has_role,
-        "is_accept_all": is_accept_all,
-        "has_no_reply": has_no_reply,
-    }

@@ -499,6 +499,8 @@ class EmailService:
         credit = self.db.query(Credit).filter(Credit.user_id == user_id).first()
         if not credit or credit.remaining_credits < 1:
             raise HTTPException(status_code=403, detail="Insufficient credits to validate emails")
+        
+
 
         disposable_domains = load_disposable_domains()
 
@@ -515,8 +517,34 @@ class EmailService:
         if credit.remaining_credits < len(cleaned_emails):
 
             raise HTTPException(status_code=403, detail="Insufficient credits")
-
+        print("debugging")
         now = datetime.now(timezone.utc)
+        bulk_stat = BulkEmailStats(
+            user_id=user_id,
+            file_name=file_name,  # Using a default filename
+            duplicate_email=duplicate_count,
+            total_valid_emails=0,
+            deliverable=0,
+            risky=0,
+            status="In-Progress",
+            total=total_emails,
+            created_at=now,
+            soft_delete=False,
+        )
+        try:
+            self.db.add(bulk_stat)
+            self.db.flush()
+            print("before commit")
+            self.db.commit()
+            print("after commit")
+
+            bulk_id = bulk_stat.id
+            print("this is the bulk id", bulk_id)
+        except Exception as e:
+            print("ERROR during flush/commit:", str(e))
+
+
+
 
         total_valid = 0
         risky_count = 0
@@ -608,20 +636,29 @@ class EmailService:
 
         deliverable_percent = (deliverable_count / total_emails) * 100 if total_emails else 0
 
-        bulk_stat = BulkEmailStats(
-            user_id=user_id,
-            file_name=file_name,  # Using a default filename
-            duplicate_email=duplicate_count,
-            total_valid_emails=total_valid,
-            deliverable=deliverable_percent,
-            risky=risky_count,
-            status="In-Progress",
-            total=total_emails,
-            created_at=now,
-            soft_delete=False,
-        )
-        self.db.add(bulk_stat)
-        self.db.flush()
+
+        bulk_email = self.db.query(BulkEmailStats).filter(
+                BulkEmailStats.id == bulk_id,
+                BulkEmailStats.user_id == user_id
+            ).first()
+        bulk_email.total_valid_emails = total_valid,
+        bulk_email.deliverable = deliverable_percent,
+        bulk_email.risky = risky_count,
+        self.db.commit()
+        # bulk_stat = BulkEmailStats(
+        #     user_id=user_id,
+        #     file_name=file_name,  # Using a default filename
+        #     duplicate_email=duplicate_count,
+        #     total_valid_emails=total_valid,
+        #     deliverable=deliverable_percent,
+        #     risky=risky_count,
+        #     status="In-Progress",
+        #     total=total_emails,
+        #     created_at=now,
+        #     soft_delete=False,
+        # )
+        # self.db.add(bulk_stat)
+        # self.db.flush()
 
         for test_email in test_email_objs:
             test_email.file_id = bulk_stat.id
