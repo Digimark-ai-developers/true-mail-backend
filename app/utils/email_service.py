@@ -33,6 +33,5 @@ def send_email_with_link(email, link):
             server.login(from_email, from_password)
             server.sendmail(from_email, email, message.as_string())
 
-        print(f"Email sent successfully to {email}!")
     except Exception as e:
         print(f"Failed to send email. Error: {e}")

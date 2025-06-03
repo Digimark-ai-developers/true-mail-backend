@@ -1,19 +1,35 @@
+import asyncio
+import csv
+import re
 from datetime import datetime, timezone
-import os
+from io import StringIO
 from typing import List
-from fastapi import HTTPException, UploadFile, status
+
+from fastapi import HTTPException, status
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
 from app.models.credits import Credit, CreditUsage
 from app.models.email import BulkEmailStats, TestEmail
 from app.models.user import User
 from app.schemas.email import (
-    BulkEmailStatsCreateWithEmails,
     BulkEmailStatsResponseWithEmails,
     CreditUsageBase,
+    SimpleEmailCheckRequest,
     TestEmailBase,
+)
+from app.utils.cache import bulk_email_status_cache
+from app.utils.cache import copy_paste_email_status_cache as cache
+from app.utils.cache import test_email_status_cache
+from app.utils.mail_utils import (
+    evaluate_email_score_and_risk,
+    get_mx_record,
+    get_smtp_provider,
+    load_disposable_domains,
+    perform_email_checks,
+    validate_email_syntax,
 )
 
 
@@ -21,49 +37,137 @@ class EmailService:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_test_email(self, user_id: str, test_email: TestEmailBase):
-        # Validate user
-        user = self.db.query(User).filter(User.user_id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User ID not found")
-
-        # Validate and deduct credit
-        credit = self.db.query(Credit).filter(Credit.user_id == user_id).first()
-        if not credit or credit.remaining_credits < 1:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient credits to test email")
-
-        credit.remaining_credits -= 1
-        credit.total_credits -= 1
-        credit.last_updated = datetime.utcnow()
-        self.db.add(credit)
-
-        # Create TestEmail entry
-        db_test_email = TestEmail(**test_email.model_dump(), user_id=user_id, created_at=datetime.now(timezone.utc), soft_delete=False)
-        self.db.add(db_test_email)
-        self.db.commit()
-        self.db.refresh(db_test_email)
-
-        # Create credit usage record
-        credit_used = CreditUsageBase(
-            user_id=user_id,
-            email_or_file_id=db_test_email.id,
-            quantity_used=1,
-            credits_used=1,
-            created_at=datetime.now(timezone.utc),
-        )
-        db_credit_used = CreditUsage(**credit_used.model_dump())
-        self.db.add(db_credit_used)
-
+    async def create_test_email(
+        self, user_id: str, test_email: SimpleEmailCheckRequest, test_id: str, sender_email: str = "test@example.com"
+    ):
         try:
+            # Validate User
+            user = self.db.query(User).filter(User.user_id == user_id).first()
+            if not user:
+                raise HTTPException(status_code=400, detail="User ID not found")
+
+            # Deduct credits
+            credit = self.db.query(Credit).filter(Credit.user_id == user_id).first()
+            if not credit or credit.remaining_credits < 1:
+                raise HTTPException(status_code=403, detail="Insufficient credits to test email")
+
+            credit.remaining_credits -= 1
+            # credit.total_credits -= 1
+            credit.last_updated = datetime.utcnow()
+            self.db.add(credit)
+
+            # Validate email
+            target_email = test_email.user_tested_email
+            if not target_email:
+                raise HTTPException(status_code=400, detail="No email provided to validate.")
+
+            disposable_domains = load_disposable_domains()
+            is_syntax_valid = validate_email_syntax(target_email)
+            mx_record_result = get_mx_record(target_email)
+            mx_record = mx_record_result[0] if mx_record_result else None
+            implicit_mx = mx_record_result[1] if mx_record_result and len(mx_record_result) > 1 else None
+
+            smtp_deliverable, smtp_reason, is_valid, validation_reason = perform_email_checks(
+                target_email=target_email, sender_email=sender_email, disposable_domains=disposable_domains
+            )
+
+            email_domain = target_email.split("@", 1)[-1].lower()
+            is_disposable = int(email_domain in disposable_domains)
+
+            match = re.search(r"@([a-zA-Z0-9.-]+)", target_email)
+            domain_name = match.group(1) if match else None
+
+            local_part = re.sub(r"[^a-zA-Z._-]", "", target_email.split("@", 1)[0])
+            cleaned_name = re.sub(r"[\\._-]+", " ", local_part).strip()
+            full_name = " ".join(part.capitalize() for part in cleaned_name.split())
+
+            email_str = target_email.lower()
+            alphabetical_count = sum(c.isalpha() for c in email_str)
+            numerical_count = sum(c.isdigit() for c in email_str)
+            unicode_symbol_count = len(email_str) - alphabetical_count - numerical_count
+
+            has_role = any(role in email_str for role in ["admin", "info", "support", "sales", "contact"])
+            is_accept_all = "accept" in email_str or "all" in email_str
+            has_no_reply = "no-reply" in email_str or "noreply" in email_str
+
+            try:
+                _, domain = target_email.split("@")
+            except ValueError:
+                domain = ""
+
+            smtp_provider = get_smtp_provider(domain)
+
+            score, is_risky, tags = evaluate_email_score_and_risk(
+                is_syntax_valid=is_syntax_valid,
+                smtp_deliverable=smtp_deliverable,
+                is_disposable=bool(is_disposable),
+                has_role=has_role,
+                is_accept_all=is_accept_all,
+                has_no_reply=has_no_reply,
+                domain=email_domain,
+                mx_record=mx_record,
+                smtp_provider=smtp_provider,
+            )
+
+            email_data = test_email.model_dump()
+            email_data.update(
+                {
+                    "user_id": user_id,
+                    "full_name": full_name or "N/A",
+                    "domain": domain_name,
+                    "created_at": datetime.now(timezone.utc),
+                    "is_risky": is_risky,
+                    "soft_delete": False,
+                    "is_valid": is_syntax_valid and smtp_deliverable,
+                    "status": "Deliverable" if is_syntax_valid and smtp_deliverable else "Invalid Email",
+                    "is_deliverable": smtp_deliverable,
+                    "reason": validation_reason or smtp_reason,
+                    "is_disposable": is_disposable,
+                    "alphabetical_characters": alphabetical_count,
+                    "has_numerical_characters": numerical_count,
+                    "has_unicode_symbols": unicode_symbol_count,
+                    "smtp_provider": smtp_provider,
+                    "mx_record": mx_record or "",
+                    "implicit_mx_record": implicit_mx,
+                    "score": score,
+                    "has_role": has_role,
+                    "is_accept_all": is_accept_all,
+                    "has_no_reply": has_no_reply,
+                }
+            )
+
+            db_test_email = TestEmail(**email_data)
+            self.db.add(db_test_email)
             self.db.commit()
             self.db.refresh(db_test_email)
-            return db_test_email
-        except IntegrityError:
-            self.db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Database error occurred",
+
+            credit_used = CreditUsageBase(
+                user_id=user_id,
+                email_or_file_id=db_test_email.id,
+                quantity_used=1,
+                credits_used=1,
+                created_at=datetime.now(timezone.utc),
             )
+            db_credit_used = CreditUsage(**credit_used.model_dump())
+            self.db.add(db_credit_used)
+
+            self.db.commit()
+            self.db.refresh(db_test_email)
+
+            # Mark task as completed
+            test_email_status_cache[test_id] = {
+                "status": "completed",
+                "email_id": db_test_email.id,
+                "message": "Test completed",
+            }
+
+        except Exception as e:
+            self.db.rollback()
+            test_email_status_cache[test_id] = {
+                "status": "failed",
+                "error": str(e),
+            }
+            raise
 
     def get_test_email(self, test_email_id: int, user_id: str):
         test_email = (
@@ -80,6 +184,15 @@ class EmailService:
 
         return test_email
 
+    def get_emails_by_creation_time(self, user_id: str):
+        query = (
+            self.db.query(TestEmail)
+            .filter(TestEmail.user_id == user_id, TestEmail.soft_delete.is_(False))
+            .order_by(TestEmail.created_at.desc())
+            .limit(5)
+        )
+        return query.all()
+
     def get_all_test_emails(self, user_id: str) -> List[TestEmail]:
         return (
             self.db.query(TestEmail)
@@ -88,122 +201,219 @@ class EmailService:
             .all()
         )
 
-    def process_bulk_email_file(self, file: UploadFile, user_id: str) -> BulkEmailStatsResponseWithEmails:
-        # ✅ Step 1: Read and extract emails from file
+    def process_bulk_email_upload(task_id: str, user_id: str, file_content: str, file_name: str, db: Session):
+        service = EmailService(db)
+
         try:
-            contents = file.file.read().decode("utf-8")
-            extension = os.path.splitext(file.filename)[1].lower()
+            result = asyncio.run(service.validate_emails_from_csv(user_id, file_content, file_name))
+            bulk_email_status_cache[task_id] = {
+                "status": "completed",
+                "message": "Bulk emails processed successfully.",
+                "result": result.dict(),
+            }
+        except Exception as e:
+            bulk_email_status_cache[task_id] = {
+                "status": "failed",
+                "message": "Bulk email processing failed.",
+                "error": str(e),
+            }
 
-            if extension not in [".csv", ".txt"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Unsupported file type. Only CSV and TXT are allowed.",
-                )
+    async def validate_emails_from_csv(
+        self,
+        user_id: str,
+        file_content: str,
+        file_name: str = "test_email.csv",
+        sender_email: str = "test@example.com",
+    ) -> BulkEmailStatsResponseWithEmails:
+        user = self.db.query(User).filter(User.user_id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=400, detail="User ID not found")
 
-            # Always treat content as comma-separated regardless of file type
-            emails = [email.strip().lower() for email in contents.split(",") if email.strip()]
+        credit = self.db.query(Credit).filter(Credit.user_id == user_id).first()
+        if not credit or credit.remaining_credits < 1:
+            raise HTTPException(status_code=403, detail="Insufficient credits to validate emails")
 
-        except Exception:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Could not read the uploaded file. Make sure it's properly formatted.",
-            )
-        finally:
-            file.file.close()
+        csv_file = StringIO(file_content)
+        csv_reader = csv.reader(csv_file)
+        disposable_domains = load_disposable_domains()
+
+        emails = []
+        for row in csv_reader:
+            if not row:
+                continue
+            email = row[0].strip().lower()
+            if email:
+                emails.append(email)
 
         if not emails:
             raise HTTPException(status_code=400, detail="No valid emails found")
-
-        credit = self.db.query(Credit).filter(Credit.user_id == user_id).first()
-        if not credit or credit.remaining_credits < len(emails):
-            raise HTTPException(status_code=403, detail="Insufficient credits")
 
         total_emails = len(emails)
         unique_emails = set(emails)
         duplicate_count = total_emails - len(unique_emails)
 
+        if credit.remaining_credits < len(emails):
+            raise HTTPException(status_code=403, detail="Insufficient credits")
+
+        now = datetime.now(timezone.utc)
+
         total_valid = 0
         risky_count = 0
         deliverable_count = 0
 
+        test_email_objs = []
+
         for email in emails:
-            if email.endswith("@gmail.com"):
+            is_syntax_valid = validate_email_syntax(email)
+            mx_record_result = get_mx_record(email)
+            mx_record = mx_record_result[0] if mx_record_result else None
+            implicit_mx = mx_record_result[1] if mx_record_result and len(mx_record_result) > 1 else None
+
+            smtp_deliverable, smtp_reason, is_valid, validation_reason = perform_email_checks(
+                target_email=email, sender_email=sender_email, disposable_domains=disposable_domains
+            )
+
+            domain = email.split("@", 1)[1].lower()
+            is_disposable = int(domain in disposable_domains)
+
+            match = re.search(r"@([a-zA-Z0-9.-]+)", email)
+            domain_name = match.group(1) if match else "unknown"
+
+            local_part = re.sub(r"[^a-zA-Z._-]", "", email.split("@", 1)[0])
+            cleaned_name = re.sub(r"[\\._-]+", " ", local_part).strip()
+            full_name = " ".join(part.capitalize() for part in cleaned_name.split()) or "N/A"
+
+            alphabetical_count = sum(c.isalpha() for c in email)
+            numerical_count = sum(c.isdigit() for c in email)
+            unicode_symbol_count = len(email) - alphabetical_count - numerical_count
+
+            has_role = any(role in email for role in ["admin", "info", "support", "sales", "contact"])
+            is_accept_all = "accept" in email or "all" in email
+            has_no_reply = "no-reply" in email or "noreply" in email
+
+            smtp_provider = get_smtp_provider(domain)
+
+            score, is_risky, tags = evaluate_email_score_and_risk(
+                is_syntax_valid=is_syntax_valid,
+                smtp_deliverable=smtp_deliverable,
+                is_disposable=bool(is_disposable),
+                has_role=has_role,
+                is_accept_all=is_accept_all,
+                has_no_reply=has_no_reply,
+                domain=domain,
+                mx_record=mx_record,
+                smtp_provider=smtp_provider,
+            )
+
+            is_email_valid = is_syntax_valid and smtp_deliverable
+            status = "valid" if is_email_valid else "invalid"
+
+            if is_email_valid:
                 total_valid += 1
                 deliverable_count += 1
-            elif "test" in email:
+            if is_risky:
                 risky_count += 1
 
-        deliverable_percent = (deliverable_count / total_emails) * 100 if total_emails > 0 else 0
+            test_email_obj = TestEmail(
+                user_id=user_id,
+                file_id=None,
+                user_tested_email=email,
+                full_name=full_name,
+                gender="Unknown",
+                status=status,
+                reason=validation_reason or smtp_reason,
+                domain=domain_name,
+                is_free=False,
+                is_risky=is_risky,
+                is_valid=is_email_valid,
+                is_disposable=is_disposable,
+                is_deliverable=smtp_deliverable,
+                has_tag=False,
+                alphabetical_characters=alphabetical_count,
+                is_mailbox_full=False,
+                has_role=has_role,
+                is_accept_all=is_accept_all,
+                has_numerical_characters=numerical_count,
+                has_unicode_symbols=unicode_symbol_count,
+                has_no_reply=has_no_reply,
+                smtp_provider=smtp_provider,
+                mx_record=mx_record or "",
+                implicit_mx_record=implicit_mx,
+                score=score,
+                soft_delete=False,
+                created_at=now,
+            )
+            test_email_objs.append(test_email_obj)
+
+        deliverable_percent = (deliverable_count / total_emails) * 100 if total_emails else 0
 
         bulk_stat = BulkEmailStats(
             user_id=user_id,
-            file_name=file.filename,
+            file_name=file_name,
             duplicate_email=duplicate_count,
             total_valid_emails=total_valid,
             deliverable=deliverable_percent,
+            risky=risky_count,
             total=total_emails,
-            created_at=datetime.now(timezone.utc),
+            created_at=now,
             soft_delete=False,
         )
         self.db.add(bulk_stat)
-        self.db.commit()
-        self.db.refresh(bulk_stat)
+        self.db.flush()
 
-        test_email_objs = []
-        for email in emails:
-            test_email_obj = TestEmail(
-                user_id=user_id,
-                file_id=bulk_stat.id,
-                user_tested_email=email,
-                full_name="Unknown",
-                gender="Unknown",
-                status="Pending",
-                reason="N/A",
-                domain="unknown.com",
-                is_free=False,
-                is_risky=False,
-                is_valid=False,
-                is_disposable=False,
-                is_deliverable=False,
-                has_tag=False,
-                alphabetical_characters=0,
-                is_mailbox_full=False,
-                has_role=False,
-                is_accept_all=False,
-                has_numerical_characters=0,
-                has_unicode_symbols=0,
-                has_no_reply=False,
-                smtp_provider="Unknown",
-                mx_record="N/A",
-                implicit_mx_record="N/A",
-                score=0,
-                soft_delete=False,
-                created_at=datetime.now(timezone.utc),
-            )
-            self.db.add(test_email_obj)
-            test_email_objs.append(test_email_obj)
+        for test_email in test_email_objs:
+            test_email.file_id = bulk_stat.id
+            self.db.add(test_email)
 
         credit.remaining_credits -= total_emails
-        credit.total_credits -= total_emails
-        credit.last_updated = datetime.utcnow()
+        # credit.total_credits -= total_emails
+        credit.last_updated = now
         self.db.add(credit)
 
-        credit_used = CreditUsageBase(
+        credit_used = CreditUsage(
             user_id=user_id,
             email_or_file_id=bulk_stat.id,
             quantity_used=total_emails,
             credits_used=total_emails,
-            created_at=datetime.now(timezone.utc),
+            created_at=now,
         )
-        self.db.add(CreditUsage(**credit_used.model_dump()))
+        self.db.add(credit_used)
 
         try:
             self.db.commit()
             return BulkEmailStatsResponseWithEmails(
                 user_id=user_id,
                 file_id=bulk_stat.id,
-                file_name=bulk_stat.file_name,
-                test_emails=[e.user_tested_email for e in test_email_objs],
+                file_name=file_name,
+                #
+                test_emails=[
+                    TestEmailBase(
+                        user_tested_email=e.user_tested_email,
+                        full_name=e.full_name,
+                        gender=e.gender,
+                        status=e.status,
+                        reason=e.reason,
+                        domain=e.domain,
+                        is_free=e.is_free,
+                        is_risky=e.is_risky,
+                        is_valid=e.is_valid,
+                        is_disposable=e.is_disposable,
+                        is_deliverable=e.is_deliverable,
+                        has_tag=e.has_tag,
+                        alphabetical_characters=e.alphabetical_characters,
+                        is_mailbox_full=e.is_mailbox_full,
+                        has_role=e.has_role,
+                        is_accept_all=e.is_accept_all,
+                        has_numerical_characters=e.has_numerical_characters,
+                        has_unicode_symbols=e.has_unicode_symbols,
+                        has_no_reply=e.has_no_reply,
+                        smtp_provider=e.smtp_provider,
+                        mx_record=e.mx_record,
+                        implicit_mx_record=e.implicit_mx_record,
+                        score=e.score,
+                    )
+                    for e in test_email_objs
+                ],
             )
         except IntegrityError:
             self.db.rollback()
@@ -230,145 +440,307 @@ class EmailService:
         return results
 
     def get_file_stats(self, file_id: int, user_id: str):
-        total_emails = self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id).count()
+        total_emails = (
+            self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id).count()
+        )
 
         if total_emails == 0:
             return None
         duplicate_count = (
-            self.db.query(BulkEmailStats.duplicate_email).filter(BulkEmailStats.id == file_id, BulkEmailStats.user_id == user_id).scalar()
+            self.db.query(BulkEmailStats.duplicate_email)
+            .filter(BulkEmailStats.id == file_id, BulkEmailStats.user_id == user_id)
+            .scalar()
         )
 
         deliverable_count = (
-            self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.is_deliverable.is_(True)).count()
+            self.db.query(TestEmail)
+            .filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.is_deliverable.is_(True))
+            .count()
         )
 
         risky_count = (
-            self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.is_risky.is_(True)).count()
+            self.db.query(TestEmail)
+            .filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.is_risky.is_(True))
+            .count()
         )
 
         undeliverable_count = total_emails - deliverable_count
+        bulk_email = (
+            self.db.query(BulkEmailStats)
+            .filter(BulkEmailStats.id == file_id, BulkEmailStats.user_id == user_id)
+            .first()
+        )
 
         return {
+            "id": bulk_email.id,
+            "file_name": bulk_email.file_name,
             "total": total_emails,
             "duplicates": duplicate_count,
             "deliverable": deliverable_count,
             "undeliverable": undeliverable_count,
             "risky": risky_count,
+            "status": bulk_email.status,
             "duplicated_percentage": round((duplicate_count / total_emails) * 100, 2),
             "deliverable_percentage": round((deliverable_count / total_emails) * 100, 2),
             "undeliverable_percentage": round((undeliverable_count / total_emails) * 100, 2),
             "risky_percentage": round((risky_count / total_emails) * 100, 2),
+            "uploaded_at": bulk_email.created_at,
         }
 
-    def create_bulk_email_with_copy_paste(self, payload: BulkEmailStatsCreateWithEmails, user_id: str):
-        email_count = len(payload.test_emails)
-
-        # Step 1: Check credit
-        credit = self.db.query(Credit).filter(Credit.user_id == user_id).first()
-        if not credit or credit.remaining_credits < email_count:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient credits to test all emails",
+    async def copy_paste_emails_background(
+        self,
+        user_id: str,
+        emails: List[str],
+        task_id: str,
+        file_name: str = None,
+    ):
+        try:
+            result = await self.copy_past_emails(user_id=user_id, emails=emails, file_name=file_name)
+            bulk_email = (
+                self.db.query(BulkEmailStats)
+                .filter(BulkEmailStats.id == result.file_id, BulkEmailStats.user_id == user_id)
+                .first()
             )
+            bulk_email.status = "Completed"
+            self.db.commit()
 
-        # Step 2: Prepare stats
-        emails = [email.lower() for email in payload.test_emails]
-        total_emails = len(emails)
-        unique_emails = set(emails)
+            cache[task_id] = {
+                "status": "completed",
+                "message": "Emails validated successfully",
+                "data": result,
+            }
+        except Exception as e:
+            cache[task_id] = {
+                "status": "failed",
+                "error": str(e),
+            }
+
+    async def copy_past_emails(
+        self,
+        user_id: str,
+        emails: List[str],
+        sender_email: str = "test@example.com",
+        file_name: str = None,
+    ) -> BulkEmailStatsResponseWithEmails:
+        user = self.db.query(User).filter(User.user_id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=400, detail="User ID not found")
+
+        credit = self.db.query(Credit).filter(Credit.user_id == user_id).first()
+        if not credit or credit.remaining_credits < 1:
+            raise HTTPException(status_code=403, detail="Insufficient credits to validate emails")
+
+        disposable_domains = load_disposable_domains()
+
+        # Clean and filter emails
+        cleaned_emails = [email.strip().lower() for email in emails if email.strip()]
+
+        if not cleaned_emails:
+            raise HTTPException(status_code=400, detail="No valid emails found")
+
+        total_emails = len(cleaned_emails)
+        unique_emails = set(cleaned_emails)
         duplicate_count = total_emails - len(unique_emails)
+
+        if credit.remaining_credits < len(cleaned_emails):
+
+            raise HTTPException(status_code=403, detail="Insufficient credits")
+        print("debugging")
+        now = datetime.now(timezone.utc)
+        bulk_stat = BulkEmailStats(
+            user_id=user_id,
+            file_name=file_name,  # Using a default filename
+            duplicate_email=duplicate_count,
+            total_valid_emails=0,
+            deliverable=0,
+            risky=0,
+            status="In-Progress",
+            total=total_emails,
+            created_at=now,
+            soft_delete=False,
+        )
+        try:
+            self.db.add(bulk_stat)
+            self.db.flush()
+            print("before commit")
+            self.db.commit()
+            print("after commit")
+
+            bulk_id = bulk_stat.id
+            print("this is the bulk id", bulk_id)
+        except Exception as e:
+            print("ERROR during flush/commit:", str(e))
 
         total_valid = 0
         risky_count = 0
         deliverable_count = 0
 
-        for email in emails:
-            if email.endswith("@gmail.com"):
+        test_email_objs = []
+
+        for email in cleaned_emails:
+            is_syntax_valid = validate_email_syntax(email)
+            mx_record_result = get_mx_record(email)
+            mx_record = mx_record_result[0] if mx_record_result else None
+            implicit_mx = mx_record_result[1] if mx_record_result and len(mx_record_result) > 1 else None
+
+            smtp_deliverable, smtp_reason, is_valid, validation_reason = perform_email_checks(
+                target_email=email, sender_email=sender_email, disposable_domains=disposable_domains
+            )
+
+            domain = email.split("@", 1)[-1].lower()
+            is_disposable = int(domain in disposable_domains)
+
+            match = re.search(r"@([a-zA-Z0-9.-]+)", email)
+            domain_name = match.group(1) if match else "unknown"
+
+            local_part = re.sub(r"[^a-zA-Z._-]", "", email.split("@", 1)[0])
+            cleaned_name = re.sub(r"[\\._-]+", " ", local_part).strip()
+            full_name = " ".join(part.capitalize() for part in cleaned_name.split()) or "N/A"
+
+            alphabetical_count = sum(c.isalpha() for c in email)
+            numerical_count = sum(c.isdigit() for c in email)
+            unicode_symbol_count = len(email) - alphabetical_count - numerical_count
+
+            has_role = any(role in email for role in ["admin", "info", "support", "sales", "contact"])
+            is_accept_all = "accept" in email or "all" in email
+            has_no_reply = "no-reply" in email or "noreply" in email
+
+            smtp_provider = get_smtp_provider(domain)
+
+            score, is_risky, tags = evaluate_email_score_and_risk(
+                is_syntax_valid=is_syntax_valid,
+                smtp_deliverable=smtp_deliverable,
+                is_disposable=bool(is_disposable),
+                has_role=has_role,
+                is_accept_all=is_accept_all,
+                has_no_reply=has_no_reply,
+                domain=domain,
+                mx_record=mx_record,
+                smtp_provider=smtp_provider,
+            )
+
+            is_email_valid = is_syntax_valid and smtp_deliverable
+            status = "valid" if is_email_valid else "invalid"
+
+            if is_email_valid:
                 total_valid += 1
                 deliverable_count += 1
-            elif "test" in email:
+            if is_risky:
                 risky_count += 1
 
-        deliverable_percent = (deliverable_count / total_emails) * 100 if total_emails > 0 else 0
-
-        bulk_stat = BulkEmailStats(
-            user_id=user_id,
-            file_name="Copy/Paste",
-            duplicate_email=duplicate_count,
-            total_valid_emails=total_valid,
-            deliverable=deliverable_percent,
-            total=total_emails,
-            soft_delete=False,
-            created_at=datetime.now(timezone.utc),
-        )
-        self.db.add(bulk_stat)
-        self.db.commit()
-        self.db.refresh(bulk_stat)
-
-        # Step 3: Add test emails
-        test_email_objs = []
-        for test_email in payload.test_emails:
             test_email_obj = TestEmail(
-                user_id=bulk_stat.user_id,
-                file_id=bulk_stat.id,
-                user_tested_email=test_email,
-                full_name="Unknown",
+                user_id=user_id,
+                file_id=None,
+                user_tested_email=email,
+                full_name=full_name,
                 gender="Unknown",
-                status="Pending",
-                reason="N/A",
-                domain="unknown.com",
+                status=status,
+                reason=validation_reason or smtp_reason,
+                domain=domain_name,
                 is_free=False,
-                is_risky=False,
-                is_valid=False,
-                is_disposable=False,
-                is_deliverable=False,
+                is_risky=is_risky,
+                is_valid=is_email_valid,
+                is_disposable=is_disposable,
+                is_deliverable=smtp_deliverable,
                 has_tag=False,
-                alphabetical_characters=0,
+                alphabetical_characters=alphabetical_count,
                 is_mailbox_full=False,
-                has_role=False,
-                is_accept_all=False,
-                has_numerical_characters=0,
-                has_unicode_symbols=0,
-                has_no_reply=False,
-                smtp_provider="Unknown",
-                mx_record="N/A",
-                implicit_mx_record="N/A",
-                score=0,
+                has_role=has_role,
+                is_accept_all=is_accept_all,
+                has_numerical_characters=numerical_count,
+                has_unicode_symbols=unicode_symbol_count,
+                has_no_reply=has_no_reply,
+                smtp_provider=smtp_provider,
+                mx_record=mx_record or "",
+                implicit_mx_record=implicit_mx,
+                score=score,
                 soft_delete=False,
-                created_at=datetime.now(timezone.utc),
+                created_at=now,
             )
-            self.db.add(test_email_obj)
             test_email_objs.append(test_email_obj)
 
-        # Step 4: Deduct credits
-        credit.remaining_credits -= email_count
-        credit.total_credits -= email_count
-        credit.last_updated = datetime.utcnow()
+        deliverable_percent = (deliverable_count / total_emails) * 100 if total_emails else 0
+
+        bulk_email = (
+            self.db.query(BulkEmailStats)
+            .filter(BulkEmailStats.id == bulk_id, BulkEmailStats.user_id == user_id)
+            .first()
+        )
+        bulk_email.total_valid_emails = (total_valid,)
+        bulk_email.deliverable = (deliverable_percent,)
+        bulk_email.risky = (risky_count,)
+        self.db.commit()
+        # bulk_stat = BulkEmailStats(
+        #     user_id=user_id,
+        #     file_name=file_name,  # Using a default filename
+        #     duplicate_email=duplicate_count,
+        #     total_valid_emails=total_valid,
+        #     deliverable=deliverable_percent,
+        #     risky=risky_count,
+        #     status="In-Progress",
+        #     total=total_emails,
+        #     created_at=now,
+        #     soft_delete=False,
+        # )
+        # self.db.add(bulk_stat)
+        # self.db.flush()
+
+        for test_email in test_email_objs:
+            test_email.file_id = bulk_stat.id
+            self.db.add(test_email)
+
+        credit.remaining_credits -= total_emails
+        # credit.total_credits -= total_emails
+        credit.last_updated = now
         self.db.add(credit)
 
-        credit_used = CreditUsageBase(
+        credit_used = CreditUsage(
             user_id=user_id,
             email_or_file_id=bulk_stat.id,
-            quantity_used=email_count,
-            credits_used=email_count,
-            created_at=datetime.now(timezone.utc),
+            quantity_used=total_emails,
+            credits_used=total_emails,
+            created_at=now,
         )
-        db_credit_used = CreditUsage(**credit_used.model_dump())
-        self.db.add(db_credit_used)
+        self.db.add(credit_used)
 
         try:
             self.db.commit()
             return BulkEmailStatsResponseWithEmails(
                 user_id=user_id,
                 file_id=bulk_stat.id,
-                file_name=bulk_stat.file_name,
-                test_emails=[email.user_tested_email for email in test_email_objs],
+                file_name=file_name,
+                test_emails=[
+                    TestEmailBase(
+                        user_tested_email=e.user_tested_email,
+                        full_name=e.full_name,
+                        gender=e.gender,
+                        status=e.status,
+                        reason=e.reason,
+                        domain=e.domain,
+                        is_free=e.is_free,
+                        is_risky=e.is_risky,
+                        is_valid=e.is_valid,
+                        is_disposable=e.is_disposable,
+                        is_deliverable=e.is_deliverable,
+                        has_tag=e.has_tag,
+                        alphabetical_characters=e.alphabetical_characters,
+                        is_mailbox_full=e.is_mailbox_full,
+                        has_role=e.has_role,
+                        is_accept_all=e.is_accept_all,
+                        has_numerical_characters=e.has_numerical_characters,
+                        has_unicode_symbols=e.has_unicode_symbols,
+                        has_no_reply=e.has_no_reply,
+                        smtp_provider=e.smtp_provider,
+                        mx_record=e.mx_record,
+                        implicit_mx_record=e.implicit_mx_record,
+                        score=e.score,
+                    )
+                    for e in test_email_objs
+                ],
             )
         except IntegrityError:
             self.db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Could not save email records",
-            )
+            raise HTTPException(status_code=400, detail="Failed to save email records")
 
     def update_file_name_by_id(self, file_id: int, new_filename: str, user_id: str) -> str:
         db_filename = (
@@ -437,7 +809,9 @@ class EmailService:
         return bulk_emails
 
     def get_emails_for_csv(self, file_id: int, user_id: str, include_risky: bool):
-        query = self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.soft_delete.is_(False))
+        query = self.db.query(TestEmail).filter(
+            TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.soft_delete.is_(False)
+        )
 
         if include_risky is False:
             query = query.filter(TestEmail.is_risky.is_(False))
@@ -446,6 +820,38 @@ class EmailService:
 
         return query.all()
 
-    def get_emails_by_creation_time(self, user_id: str):
-        query = self.db.query(TestEmail).filter(TestEmail.user_id == user_id, TestEmail.soft_delete.is_(False)).order_by(TestEmail.created_at.desc())
-        return query.all()
+    def get_all_files_with_delieved_emails_and_status(self, user_id: str):
+        files = (
+            self.db.query(BulkEmailStats)
+            .filter(BulkEmailStats.user_id == user_id)
+            .order_by(BulkEmailStats.created_at.desc())  # 👈 sort by latest
+            .all()
+        )
+        result = []
+
+        for file in files:
+            total_emails = (
+                self.db.query(TestEmail).filter(TestEmail.file_id == file.id, TestEmail.user_id == user_id).count()
+            )
+
+            deliverable_count = (
+                self.db.query(TestEmail)
+                .filter(
+                    TestEmail.file_id == file.id,
+                    TestEmail.user_id == user_id,
+                    TestEmail.is_deliverable.is_(True),
+                )
+                .count()
+            )
+
+            result.append(
+                {
+                    "id": file.id,
+                    "file_name": file.file_name,
+                    "deliverable": deliverable_count,
+                    "total_emails": total_emails,
+                    "status": file.status,
+                }
+            )
+
+        return result

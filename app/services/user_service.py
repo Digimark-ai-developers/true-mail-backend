@@ -1,6 +1,9 @@
 # app/services/user_service.py
 from datetime import datetime
+
 from sqlalchemy.orm import Session
+
+from app.models.credits import Credit
 from app.models.user import User
 from app.schemas.user import UserProfileRead, UserProfileUpdate
 
@@ -9,7 +12,17 @@ def fetch_user_profile(user_id: str, db: Session) -> UserProfileRead:
     user = db.query(User).filter(User.user_id == user_id).first()
     if not user:
         return None
-    return UserProfileRead.model_validate(user)
+
+    credit = db.query(Credit).filter(Credit.user_id == user_id).first()
+
+    user_data = UserProfileRead.model_validate(user)
+
+    # Add credit info if available
+    if credit:
+        user_data.total_credits = credit.total_credits
+        user_data.remaining_credits = credit.remaining_credits
+
+    return user_data
 
 
 def update_user_profile(user_id, user_data: UserProfileUpdate, db: Session) -> UserProfileUpdate:

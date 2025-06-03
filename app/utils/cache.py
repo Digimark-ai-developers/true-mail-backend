@@ -1,0 +1,4 @@
+# utils/cache.py
+test_email_status_cache = {}
+bulk_email_status_cache = {}
+copy_paste_email_status_cache = {}

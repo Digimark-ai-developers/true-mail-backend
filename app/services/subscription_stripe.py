@@ -1,12 +1,14 @@
-from datetime import datetime, timedelta, timezone
 import uuid
-from fastapi import HTTPException
+from datetime import datetime, timedelta
+
 import stripe
+from dotenv import load_dotenv
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
+
+from app.models.credits import Credit, CreditHistory
 from app.models.subscriptions_stripe import Invoices
 from app.models.user import User
-from app.models.credits import Credit, CreditHistory
-from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -14,16 +16,20 @@ load_dotenv()
 # endpoint_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
 # YOUR_DOMAIN = os.getenv("FRONTEND_DOMAIN")
 
-stripe.api_key = "sk_test_51PY76e2MGeqNp340z0BavRh70aMrc5NqSmof5lIAXPzSfgpPBWOUg5YQo8ICUmHyXZhmFDogyklDoG90gmuEFcw400JIZnaQiI"
-endpoint_secret = "whsec_282f3a4ad56bc05adbeaa907b181be408135945a8f6c3286a7b75fc9c2bf677f"
-YOUR_DOMAIN = "http://127.0.0.1:8002"
+stripe.api_key = (
+    "sk_test_51PY76e2MGeqNp340z0BavRh70aMrc5NqSmof5lIAXPzSfgpPBWOUg5YQo8ICUmHyXZhmFDogyklDoG90gmuEFcw400JIZnaQiI"
+)
+endpoint_secret = "whsec_k05E5GLSADRVJfvI7JdSAg4LtBFGMYyV"
+# endpoint_secret = "whsec_282f3a4ad56bc05adbeaa907b181be408135945a8f6c3286a7b75fc9c2bf677f"
+
+YOUR_DOMAIN = "http://127.0.0.1:5173"
 
 
 class PaymentService:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_checkout_session(self, email: str, card_title: str, card_price: int, user_id: str, credits: int):
+    def create_checkout_session(self, email: str, success_url: str, card_price: int, credits: int, user_id: str):
         try:
             session = stripe.checkout.Session.create(
                 payment_method_types=["card"],
@@ -34,17 +40,14 @@ class PaymentService:
                     {
                         "price_data": {
                             "currency": "usd",
-                            "product_data": {
-                                "name": card_title,
-                                "description": "Access to selected plan",
-                            },
+                            "product_data": {"name": "Credit Purchase", "description": f"{credits} credits package"},
                             "unit_amount": card_price,
                         },
                         "quantity": 1,
                     }
                 ],
-                success_url=f"{YOUR_DOMAIN}/payment-success",
-                cancel_url=f"{YOUR_DOMAIN}/payment-cancel",
+                success_url=success_url,
+                cancel_url=success_url,
                 metadata={
                     "user_id": str(user_id),
                     "credits": str(credits),
@@ -64,7 +67,7 @@ class PaymentService:
             event_type = event["type"]
             data_object = event["data"]["object"]
 
-            if event_type in ["checkout.session.completed", "charge.updated"]:
+            if event_type in ["checkout.session.completed"]:
                 self._handle_successful_checkout(data_object)
 
             elif event_type == "invoice.payment_failed":
@@ -81,6 +84,7 @@ class PaymentService:
 
     def _handle_successful_checkout(self, data_object):
         user_id = data_object.get("metadata", {}).get("user_id")
+
         credits = int(data_object.get("metadata", {}).get("credits", 0))
         # email = data_object.get("customer_email")
         amount_total = data_object.get("amount_total")
@@ -94,14 +98,14 @@ class PaymentService:
         existing_credit.is_paid = True
         existing_credit.total_credits += credits
         existing_credit.remaining_credits += credits
-        existing_credit.last_updated = datetime.now(timezone.utc)
-        existing_credit.expires_at = datetime.now(timezone.utc) + timedelta(days=730)
+        existing_credit.last_updated = datetime.now()
+        existing_credit.expires_at = datetime.now() + timedelta(days=730)
 
         new_credit_history = CreditHistory(
             user_id=user_id,
             credits_purchased=credits,
             amount=amount_total,
-            purchased_at=datetime.now(timezone.utc),
+            purchased_at=datetime.now(),
         )
 
         new_invoice = Invoices(
@@ -109,7 +113,7 @@ class PaymentService:
             amount=amount_total,
             number=number,
             status=True,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(),
         )
 
         self.db.add(new_credit_history)
@@ -124,5 +128,7 @@ class PaymentService:
             self.db.commit()
 
     def get_invoices(self, user_id: str):
-        invoices = self.db.query(Invoices).filter(Invoices.user_id == user_id).all()
+        invoices = (
+            self.db.query(Invoices).filter(Invoices.user_id == user_id).order_by(Invoices.created_at.desc()).all()
+        )
         return invoices

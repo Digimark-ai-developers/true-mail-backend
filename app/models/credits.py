@@ -1,7 +1,19 @@
-from sqlalchemy import Column, BigInteger, String, ForeignKey, Boolean, DateTime, DECIMAL, Integer, Float
-from sqlalchemy.orm import relationship
-from app.database.db_config import Base
 from datetime import datetime
+
+from sqlalchemy import (
+    DECIMAL,
+    BigInteger,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+)
+from sqlalchemy.orm import relationship
+
+from app.database.db_config import Base
 
 
 class Credit(Base):

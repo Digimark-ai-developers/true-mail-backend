@@ -1,12 +1,12 @@
 from sqlalchemy import (
+    Boolean,
     Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
     String,
     Text,
-    Boolean,
-    Integer,
-    DateTime,
-    ForeignKey,
-    Float,
 )
 from sqlalchemy.orm import relationship
 
@@ -19,12 +19,12 @@ class BulkEmailStats(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, ForeignKey("user.user_id"))
     file_name = Column(String(255))
-    user_tested_email = Column(Text)
     duplicate_email = Column(Integer)  # how much duplicates in a file i numbers
     total_valid_emails = Column(Integer)
-    email_status = Column(Text)
+    status = Column(String)
     deliverable = Column(Float)
     total = Column(Integer)
+    risky = Column(Integer)
     soft_delete = Column(Boolean)
     created_at = Column(DateTime)
     soft_delete = Column(Boolean)

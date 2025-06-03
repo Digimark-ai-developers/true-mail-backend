@@ -1,15 +1,37 @@
 # app/services/auth_service.py
-from firebase_admin import auth
+import os
+from datetime import datetime, timedelta, timezone
+
+import requests
+from dotenv import load_dotenv
 from fastapi import HTTPException, status
+from firebase_admin import auth
 from firebase_admin import auth as firebase_auth
 from firebase_admin._auth_utils import UserNotFoundError  # Import this
 from sqlalchemy.orm import Session
+
 from app.models.credits import Credit
 from app.models.user import User
 from app.schemas.auth import UserRegisterRequest
 from app.utils.email_service import send_email_with_link
-from app.utils.firebase import verify_firebase_token
-from datetime import datetime, timedelta, timezone
+from app.utils.jwt_handler import create_jwt_token  # import your custom JWT creator
+
+load_dotenv()
+
+
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+# GOOGLE_CLIENT_ID = "832562555316-5dep9dq8veklnqa3ogom7gba8p76eu5t.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+GOOGLE_REDIRECT_URI = os.getenv("GOOGLE_REDIRECT_URI")
+# GOOGLE_REDIRECT_URI = "https://true-mail-backend.vercel.app/auth/google"
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
+GITHUB_REDIRECT_URI = os.getenv("GITHUB_REDIRECT_URI")
+# GITHUB_REDIRECT_URI = "https://true-mail-backend.vercel.app/auth/github"
+
+FACEBOOK_CLIENT_ID = os.getenv("FACEBOOK_CLIENT_ID")
+FACEBOOK_CLIENT_SECRET = os.getenv("FACEBOOK_CLIENT_SECRET")
+FACEBOOK_REDIRECT_URI = os.getenv("FACEBOOK_REDIRECT_URI")
 
 
 class AuthService:
@@ -23,7 +45,7 @@ class AuthService:
                 email=user_data.email,
                 password=user_data.password,
                 display_name=f"{user_data.first_name} {user_data.last_name}",
-                photo_url=user_data.photoURL,
+                # photo_url=user_data.photoURL,
             )
 
             # Generate email verification link and send email
@@ -51,15 +73,6 @@ class AuthService:
             credit_entry = Credit(
                 user_id=firebase_user.uid,
                 is_paid=False,
-                total_credits=100,
-                remaining_credits=100,
-                created_at=datetime.now(timezone.utc),
-                last_updated=datetime.now(timezone.utc),
-                expires_at=datetime.now(timezone.utc) + timedelta(days=730),
-            )
-            credit_entry = Credit(
-                user_id=firebase_user.uid,
-                is_paid=False,
                 total_credits=100,  # add free credits to the use
                 remaining_credits=100,  # and remaining credits of uesr
                 created_at=datetime.utcnow(),
@@ -80,28 +93,284 @@ class AuthService:
             print(e)
             raise e  # just re-raise the exception
 
-    def login_user(self, id_token: str) -> User:
+    def login_with_email_password(self, email: str, password: str) -> str:
         try:
-            user_info = verify_firebase_token(id_token)
-            uid = user_info["uid"]
+            firebase_user = firebase_auth.get_user_by_email(email)
+        except UserNotFoundError:
+            raise HTTPException(status_code=404, detail="User does not exist. Please register first.")
 
-            # Fetch Firebase user details
-            firebase_user = firebase_auth.get_user(uid)
-            if not firebase_user.email_verified:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Email not verified. Please verify your email first.",
-                )
+        if not firebase_user.email_verified:
+            raise HTTPException(status_code=403, detail="Email is not verified")
 
-            # Fetch user from local DB
-            user = self.db.query(User).filter(User.user_id == uid).first()
-            if not user:
-                raise HTTPException(status_code=404, detail="User not found. Please register first.")
+        fire_base_api_key = os.getenv("FIREBASE_API_KEY")
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={fire_base_api_key}"
 
-            return user
+        payload = {
+            "email": email,
+            "password": password,
+            "returnSecureToken": True,
+        }
 
-        except Exception as e:
-            raise HTTPException(status_code=401, detail=f"Login failed: {str(e)}")
+        response = requests.post(url, json=payload)
+        if response.status_code != 200:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        data = response.json()  # noqa: F841
+
+        # Extract user info for your custom JWT
+        user_info = {
+            "uid": firebase_user.uid,
+            "email": firebase_user.email,
+            "name": firebase_user.display_name or "",
+            "picture": firebase_user.photo_url or "",
+        }
+
+        return create_jwt_token(user_info)
+
+    def get_google_oauth_url(self):
+
+        return (
+            f"https://accounts.google.com/o/oauth2/auth"
+            f"?response_type=code"
+            f"&client_id={GOOGLE_CLIENT_ID}"
+            f"&redirect_uri={GOOGLE_REDIRECT_URI}"
+            f"&scope=openid%20profile%20email"
+            f"&access_type=offline"
+            f"&prompt=consent"
+        )
+
+    def exchange_code_for_token(self, code: str):
+        token_url = "https://oauth2.googleapis.com/token"
+        data = {
+            "code": code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": GOOGLE_REDIRECT_URI,
+            "grant_type": "authorization_code",
+        }
+
+        response = requests.post(token_url, data=data)
+        if response.status_code != 200:
+            print("❌ Token exchange failed:", response.text)  # <== Add this
+            raise HTTPException(status_code=400, detail="Failed to exchange code for token")
+
+        tokens = response.json()
+        id_token = tokens.get("id_token")
+        access_token = tokens.get("access_token")
+
+        if not id_token or not access_token:
+            raise HTTPException(status_code=400, detail="No id_token or access_token received")
+
+        user_info_response = requests.get(
+            "https://www.googleapis.com/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"}
+        )
+
+        if user_info_response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch user info")
+
+        user_info = user_info_response.json()
+
+        return user_info, id_token
+
+    def exchange_code_for_facebook_token(self, code: str):
+        token_url = "https://graph.facebook.com/v19.0/oauth/access_token"
+        data = {
+            "client_id": FACEBOOK_CLIENT_ID,
+            "client_secret": FACEBOOK_CLIENT_SECRET,
+            "code": code,
+            "redirect_uri": FACEBOOK_REDIRECT_URI,
+        }
+
+        response = requests.get(token_url, params=data)
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to exchange code for token")
+
+        tokens = response.json()
+        access_token = tokens.get("access_token")
+        if not access_token:
+            raise HTTPException(status_code=400, detail="No access token received")
+
+        # Get user info
+        user_info_url = "https://graph.facebook.com/me?fields=id,name,email"
+        user_info_response = requests.get(user_info_url, params={"access_token": access_token})
+        if user_info_response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch Facebook user info")
+
+        return user_info_response.json(), access_token
+
+    def login_with_facebook_token(self, access_token: str):
+        firebase_api_key = os.getenv("FIREBASE_API_KEY")
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={firebase_api_key}"
+
+        payload = {
+            "postBody": f"access_token={access_token}&providerId=facebook.com",
+            "requestUri": "http://localhost",  # Firebase requires a requestUri but doesn't validate it strictly
+            "returnSecureToken": True,
+            "returnIdpCredential": True,
+        }
+
+        response = requests.post(url, json=payload)
+        if response.status_code != 200:
+            error_detail = response.json().get("error", {}).get("message", "Unknown error")
+            raise HTTPException(status_code=401, detail=f"Facebook sign-in failed: {error_detail}")
+
+        data = response.json()
+        firebase_uid = data["localId"]
+
+        custom_token = create_jwt_token(
+            {
+                "uid": firebase_uid,
+                "email": data.get("email", ""),
+                "name": data.get("displayName", ""),
+                "picture": data.get("photoUrl", ""),
+            }
+        )
+
+        return custom_token, firebase_uid
+
+    def get_or_create_user(self, user_info: dict, firebase_uid: str = None):
+        email = user_info.get("email")
+        name = user_info.get("name")
+
+        user = self.db.query(User).filter(User.email == email).first()
+        if not user:
+            user = User(
+                user_id=firebase_uid,  # <-- Store Firebase UID here
+                email=email,
+                first_name=name,
+                created_at=datetime.utcnow(),
+                # add other fields if needed
+            )
+            credit_entry = Credit(
+                user_id=firebase_uid,
+                is_paid=False,
+                total_credits=100,  # add free credits to the use
+                remaining_credits=100,  # and remaining credits of uesr
+                created_at=datetime.utcnow(),
+                last_updated=datetime.utcnow(),
+                expires_at=datetime.utcnow() + timedelta(days=365),  # 1 years
+            )
+
+            self.db.add(credit_entry)
+
+            self.db.add(user)
+            self.db.commit()
+            self.db.refresh(user)
+
+        return user
+
+    def get_facebook_oauth_url(self):
+        return (
+            f"https://www.facebook.com/v19.0/dialog/oauth"
+            f"?client_id={FACEBOOK_CLIENT_ID}"
+            f"&redirect_uri={FACEBOOK_REDIRECT_URI}"
+            f"&scope=email"
+            f"&response_type=code"
+        )
+
+    def get_user_info(self, access_token: str):
+        user_info_url = "https://www.googleapis.com/oauth2/v1/userinfo"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        response = requests.get(user_info_url, headers=headers)
+        response.raise_for_status()
+        return response.json()
+
+    def login_with_google_user_info(self, id_token: str, provider_id="google.com") -> tuple[str, str]:
+        firebase_api_key = os.getenv("FIREBASE_API_KEY")
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={firebase_api_key}"
+
+        payload = {
+            "postBody": f"id_token={id_token}&providerId={provider_id}",
+            "requestUri": GOOGLE_REDIRECT_URI,
+            "returnSecureToken": True,
+        }
+
+        response = requests.post(url, json=payload)
+        if response.status_code != 200:
+            error_detail = response.json().get("error", {}).get("message", "Unknown error")
+            raise HTTPException(status_code=401, detail=f"Google sign-in failed: {error_detail}")
+
+        data = response.json()
+        firebase_uid = data["localId"]
+
+        # 🔐 Create your custom JWT
+        custom_token = create_jwt_token(
+            {
+                "uid": firebase_uid,
+                "email": data.get("email", ""),
+                "name": data.get("displayName", ""),
+                "picture": data.get("photoUrl", ""),
+            }
+        )
+
+        return custom_token, firebase_uid
+
+    def get_github_oauth_url(self):
+        return (
+            f"https://github.com/login/oauth/authorize"
+            f"?client_id={GITHUB_CLIENT_ID}"
+            f"&redirect_uri={GITHUB_REDIRECT_URI}"
+            f"&scope=user:email"
+        )
+
+    def exchange_code_for_github_token(self, code: str):
+        token_url = "https://github.com/login/oauth/access_token"
+        headers = {"Accept": "application/json"}
+        data = {
+            "client_id": GITHUB_CLIENT_ID,
+            "client_secret": GITHUB_CLIENT_SECRET,
+            "code": code,
+            "redirect_uri": GITHUB_REDIRECT_URI,
+        }
+
+        response = requests.post(token_url, headers=headers, data=data)
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to exchange code for token")
+
+        tokens = response.json()
+        access_token = tokens.get("access_token")
+        if not access_token:
+            raise HTTPException(status_code=400, detail="No access token received")
+
+        # Fetch user info from GitHub
+        user_info_response = requests.get(
+            "https://api.github.com/user", headers={"Authorization": f"token {access_token}"}
+        )
+        if user_info_response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch GitHub user info")
+
+        user_info = user_info_response.json()
+
+        # Optional: fetch email (separate endpoint if email is not public)
+        if not user_info.get("email"):
+            emails_response = requests.get(
+                "https://api.github.com/user/emails", headers={"Authorization": f"token {access_token}"}
+            )
+            if emails_response.status_code == 200:
+                primary_email = next((email["email"] for email in emails_response.json() if email["primary"]), None)
+                user_info["email"] = primary_email
+
+        # GitHub doesn't return an ID token, so you'll use access_token in Firebase login
+        return user_info, access_token
+
+    def login_with_github_access_token(self, access_token: str, provider_id="github.com") -> tuple[str, str]:
+        firebase_api_key = os.getenv("FIREBASE_API_KEY")
+        url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key={firebase_api_key}"
+
+        payload = {
+            "postBody": f"access_token={access_token}&providerId={provider_id}",
+            "requestUri": GITHUB_REDIRECT_URI,
+            "returnSecureToken": True,
+        }
+
+        response = requests.post(url, json=payload)
+        if response.status_code != 200:
+            error_detail = response.json().get("error", {}).get("message", "Unknown error")
+            raise HTTPException(status_code=401, detail=f"GitHub sign-in failed: {error_detail}")
+
+        data = response.json()
+        return data["idToken"], data["localId"]
 
     def send_password_reset_email(self, email: str):
         try:

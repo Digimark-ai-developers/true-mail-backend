@@ -1,11 +1,12 @@
 import os
 from logging.config import fileConfig
+
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
+
 from alembic import context
 from app.database.db_config import Base  # this includes declarative_base()
-
-from app.models import email, user, subscriptions_stripe, credits  # noqa: F401
+from app.models import credits, email, subscriptions_stripe, user  # noqa: F401
 
 target_metadata = Base.metadata
 

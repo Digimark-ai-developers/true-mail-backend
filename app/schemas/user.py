@@ -59,6 +59,8 @@ class UserProfileRead(BaseModel):
     state: Optional[str] = None
     zip_code: Optional[str] = None
     country: Optional[str] = None
+    total_credits: Optional[int] = None
+    remaining_credits: Optional[int] = None
 
     model_config = {"from_attributes": True}  # <- this replaces orm_mode = True in Pydantic v2
 

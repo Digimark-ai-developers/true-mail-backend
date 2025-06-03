@@ -28,32 +28,50 @@ class TestEmailBase(BaseModel):
     gender: Optional[str] = None
     status: Optional[str] = None
     reason: Optional[str] = None
-    domain: str
-    is_free: bool
-    is_risky: bool
-    is_valid: bool
-    is_disposable: bool
-    is_deliverable: bool
-    has_tag: bool
-    alphabetical_characters: int
-    is_mailbox_full: bool
-    has_role: bool
-    is_accept_all: bool
-    has_numerical_characters: int
-    has_unicode_symbols: int
-    has_no_reply: bool
+    domain: Optional[str] = None
+
+    is_free: Optional[bool] = None
+    is_risky: Optional[bool] = None
+    is_valid: Optional[bool] = None
+    is_disposable: Optional[bool] = None
+    is_deliverable: Optional[bool] = None
+    has_tag: Optional[bool] = None
+    is_mailbox_full: Optional[bool] = None
+    has_role: Optional[bool] = None
+    is_accept_all: Optional[bool] = None
+    has_no_reply: Optional[bool] = None
+
+    alphabetical_characters: Optional[int] = None
+    has_numerical_characters: Optional[int] = None
+    has_unicode_symbols: Optional[int] = None
+    score: Optional[int] = None
+
     smtp_provider: Optional[str] = None
     mx_record: Optional[str] = None
     implicit_mx_record: Optional[str] = None
-    score: int
 
-    model_config = ConfigDict(from_attributes=True)  # Pydantic v2 replacement for orm_mode=True
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BulkEmailStatsResponseWithEmails(BaseModel):
+    user_id: str
+    file_id: int
+    file_name: str
+    test_emails: List[TestEmailBase]  # List of validated emails
+
+
+class BulkEmailStatsWrapper(BaseModel):
+    message: str
+    status: int
+    task_id: Optional[str] = None
+    data: Optional[BulkEmailStatsResponseWithEmails] = None
 
 
 class TestEmailWrapper(BaseModel):
     message: str
     status: int
-    data: TestEmailBase
+    test_id: Optional[str] = None
+    data: Optional[TestEmailBase] = None
 
 
 class TestEmailResponse(BaseModel):
@@ -63,27 +81,26 @@ class TestEmailResponse(BaseModel):
     gender: Optional[str] = None
     status: Optional[str] = None
     reason: Optional[str] = None
-    domain: str
-    is_free: bool
+    domain: Optional[str] = None  # changed to Optional
+    is_free: Optional[bool] = None  # changed to Optional
     is_risky: Optional[bool] = None
-    is_valid: bool
-    is_disposable: bool
-    is_deliverable: bool
-    has_tag: bool
-    alphabetical_characters: int
-    is_mailbox_full: bool
-    has_role: bool
-    is_accept_all: bool
-    has_numerical_characters: int
-    has_unicode_symbols: int
-    has_no_reply: bool
+    is_valid: Optional[bool] = None  # changed to Optional
+    is_disposable: Optional[bool] = None  # changed to Optional
+    is_deliverable: Optional[bool] = None  # changed to Optional
+    has_tag: Optional[bool] = None  # changed to Optional
+    alphabetical_characters: Optional[int] = None  # changed to Optional
+    is_mailbox_full: Optional[bool] = None  # changed to Optional
+    has_role: Optional[bool] = None  # changed to Optional
+    is_accept_all: Optional[bool] = None  # changed to Optional
+    has_numerical_characters: Optional[int] = None
+    has_unicode_symbols: Optional[int] = None
+    has_no_reply: Optional[bool] = None  # changed to Optional
     smtp_provider: Optional[str] = None
     mx_record: Optional[str] = None
     implicit_mx_record: Optional[str] = None
-    score: int
-    created_at: datetime
+    score: Optional[int] = None  # changed to Optional
 
-    model_config = ConfigDict(from_attributes=True)  # Pydantic v2 replacement for orm_mode=True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TestEmailResponseWrapper(BaseModel):
@@ -96,6 +113,11 @@ class dowloadFileWrapper(BaseModel):
     message: str
     status: int
     data: List[TestEmailResponse]
+
+
+class BulkEmailUploadRequest(BaseModel):
+    file_name: str
+    file_content: str  # plain text with newlines
 
 
 class AllTestEmaislByUserId(BaseModel):
@@ -125,15 +147,19 @@ class AllTestEmailsByFileResponseWrapper(BaseModel):
 
 
 class FileStatsResponse(BaseModel):
+    id: int
+    file_name: str
     total: int
     duplicates: int
     deliverable: int
     undeliverable: int
     risky: int
+    status: Optional[str]
     duplicated_percentage: float
     deliverable_percentage: float
     undeliverable_percentage: float
     risky_percentage: float
+    uploaded_at: datetime
 
 
 class FileStatsResponseWrapper(BaseModel):
@@ -180,12 +206,12 @@ class CreditUsageBase(BaseModel):
 
 
 class BulkEmailStatsCreateWithEmails(BaseModel):
+    file_name: Optional[str] = None
     test_emails: List[str] = Field(..., description="List of email addresses to be tested")
 
     class Config:
         json_schema_extra = {
             "example": {
-                "user_id": "user_123",
                 "file_name": "marketing_emails_may.csv",
                 "test_emails": [
                     "john@example.com",
@@ -200,4 +226,25 @@ class BulkEmailStatsResponseWithEmails(BaseModel):
     user_id: str
     file_id: int
     file_name: str
-    test_emails: list[str]
+    test_emails: list[TestEmailBase]
+
+
+class BulkEmailResponseWrapper(BaseModel):
+    message: str
+    status: int
+    task_id: Optional[str] = None
+    data: Optional[BulkEmailStatsResponseWithEmails] = None
+
+
+class FileStats(BaseModel):
+    id: int
+    file_name: Optional[str] = None
+    total_emails: Optional[int] = None
+    deliverable: Optional[int] = None
+    status: Optional[str] = None
+
+
+class FileStatsResponse(BaseModel):
+    message: str
+    status: int
+    data: List[FileStats]

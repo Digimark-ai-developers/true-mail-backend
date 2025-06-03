@@ -1,6 +1,7 @@
 from datetime import datetime
-from pydantic import BaseModel, EmailStr
 from typing import Optional
+
+from pydantic import BaseModel, EmailStr
 
 
 class UserInfo(BaseModel):
@@ -15,9 +16,9 @@ class UserInfo(BaseModel):
 
 
 class CheckoutSessionRequest(BaseModel):
-    card_title: str
+    success_url: str
     card_price: int
-    user_id: str
+    # user_id: str
     credits: int
 
 
