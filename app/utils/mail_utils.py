@@ -10,6 +10,7 @@ from typing import Optional
 
 import dns.resolver
 import whois
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 
 def load_disposable_domains(file_path="disposed_email.conf"):
@@ -29,6 +30,7 @@ def validate_email_syntax(email):
     return bool(re.match(pattern, email))
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=4), reraise=True)
 def get_mx_record(domain):
     try:
         resolver = dns.resolver.Resolver()
@@ -44,6 +46,7 @@ def get_mx_record(domain):
         return None, True  # No record found or error = implicit MX
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=4), reraise=True)
 def verify_smtp_server(mx_record, domain):
     ports = [
         25,
@@ -92,6 +95,7 @@ def get_smtp_provider(domain: str) -> str:
     return provider_map.get(domain, "Unknown")  # Returns provider name or "Unknown"
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=4), reraise=True)
 def check_email_reachability(email, sender_email, disposable_domains):
     # Helper function to analyze characters in email address
     def analyze_string(email):
@@ -160,6 +164,7 @@ def check_email_reachability(email, sender_email, disposable_domains):
             pass
 
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=4), reraise=True)
 def perform_email_checks(target_email: str, sender_email: str, disposable_domains: list):
     # Extract domain and provider
     try:

@@ -201,7 +201,7 @@ class EmailService:
             .all()
         )
 
-    def process_bulk_email_upload(task_id: str, user_id: str, file_content: str, file_name: str, db: Session):
+    def process_bulk_email_upload(self, task_id: str, user_id: str, file_content: str, file_name: str, db: Session):
         service = EmailService(db)
 
         try:
