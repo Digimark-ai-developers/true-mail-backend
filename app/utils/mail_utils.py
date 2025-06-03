@@ -96,7 +96,6 @@ def check_email_reachability(email, sender_email, disposable_domains):
         return {"alphabetic": alphabetic, "numeric": numeric, "symbols": symbols}
 
     result = analyze_string(email)
-    print(result)  # Optional: Debugging output for analysis result
 
     # Step 1: Syntax Check
     if not validate_email_syntax(email):

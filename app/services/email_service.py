@@ -517,7 +517,6 @@ class EmailService:
         if credit.remaining_credits < len(cleaned_emails):
 
             raise HTTPException(status_code=403, detail="Insufficient credits")
-        print("debugging")
         now = datetime.now(timezone.utc)
         bulk_stat = BulkEmailStats(
             user_id=user_id,
@@ -534,14 +533,11 @@ class EmailService:
         try:
             self.db.add(bulk_stat)
             self.db.flush()
-            print("before commit")
             self.db.commit()
-            print("after commit")
 
             bulk_id = bulk_stat.id
-            print("this is the bulk id", bulk_id)
         except Exception as e:
-            print("ERROR during flush/commit:", str(e))
+            raise HTTPException(status_code=500, detail="Internal Server Error")
 
 
 
@@ -784,12 +780,15 @@ class EmailService:
         return bulk_emails
 
     def get_emails_for_csv(self, file_id: int, user_id: str, include_risky: bool):
-        query = self.db.query(TestEmail).filter(TestEmail.file_id == file_id, TestEmail.user_id == user_id, TestEmail.soft_delete.is_(False))
+        query = self.db.query(TestEmail).filter(
+            TestEmail.file_id == file_id,
+            TestEmail.user_id == user_id,
+            TestEmail.soft_delete.is_(False)
+        )
 
-        if include_risky is False:
-            query = query.filter(TestEmail.is_risky.is_(False))
-        elif include_risky is True:
+        if include_risky is True:
             query = query.filter(TestEmail.is_risky.is_(True))
+        # if False, do not filter by is_risky (i.e., return all)
 
         return query.all()
 

@@ -88,7 +88,6 @@ class AuthService:
 
         except Exception as e:
             self.db.rollback()
-            print(e)
             raise e  # just re-raise the exception
 
     def login_with_email_password(self, email: str, password: str) -> str:
@@ -149,7 +148,6 @@ class AuthService:
 
         response = requests.post(token_url, data=data)
         if response.status_code != 200:
-            print("❌ Token exchange failed:", response.text)  # <== Add this
             raise HTTPException(status_code=400, detail="Failed to exchange code for token")
 
         tokens = response.json()

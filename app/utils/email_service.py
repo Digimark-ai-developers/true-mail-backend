@@ -34,4 +34,4 @@ def send_email_with_link(email, link):
             server.sendmail(from_email, email, message.as_string())
 
     except Exception as e:
-        print(f"Failed to send email. Error: {e}")
+        raise Exception(f"Failed to send email: {str(e)}")
