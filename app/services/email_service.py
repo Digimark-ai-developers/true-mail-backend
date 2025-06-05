@@ -304,7 +304,7 @@ class EmailService:
             )
             test_email_objs.append(test_email_obj)
 
-        deliverable_percent = (deliverable_count / total_emails) * 100 if total_emails else 0
+        deliverable_percent = int((deliverable_count / total_emails) * 100) if total_emails else 0
 
         bulk_stat = BulkEmailStats(
             user_id=user_id,
