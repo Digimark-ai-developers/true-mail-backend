@@ -330,7 +330,7 @@ class EmailService:
             )
             test_email_objs.append(test_email_obj)
 
-        deliverable_percent = (deliverable_count / total_emails) * 100 if total_emails else 0
+        deliverable_percent = int((deliverable_count / total_emails) * 100) if total_emails else 0
 
         bulk_stat = BulkEmailStats(
             user_id=user_id,
@@ -630,7 +630,7 @@ class EmailService:
             )
             test_email_objs.append(test_email_obj)
 
-        deliverable_percent = (deliverable_count / total_emails) * 100 if total_emails else 0
+        deliverable_percent = int((deliverable_count / total_emails) * 100) if total_emails else 0
 
 
         bulk_email = self.db.query(BulkEmailStats).filter(
@@ -795,8 +795,10 @@ class EmailService:
     def get_all_files_with_delieved_emails_and_status(self, user_id: str):
         files = (
             self.db.query(BulkEmailStats)
-            .filter(BulkEmailStats.user_id == user_id)
-            .order_by(BulkEmailStats.created_at.desc())  # 👈 sort by latest
+            .filter(
+                BulkEmailStats.user_id == user_id,
+                BulkEmailStats.soft_delete == False
+            ).order_by(BulkEmailStats.created_at.desc())  # 👈 sort by latest
             .all()
         )
         result = []
