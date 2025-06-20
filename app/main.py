@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routes import auth, email, user
+from app.routes import auth, email, user, validator
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
@@ -24,3 +24,4 @@ async def root():
 app.include_router(auth.router, prefix="/auth", tags=["Auth Management"])
 app.include_router(email.router, tags=["Home Email"])
 app.include_router(user.router, prefix="/user", tags=["User Management"])
+app.include_router(validator.router, prefix="/validation", tags=["Validator Function"])

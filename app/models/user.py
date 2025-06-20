@@ -1,5 +1,6 @@
 from sqlalchemy import Boolean, Column, Integer, String, DateTime, JSON
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from app.db.session import Base
 
 class User(Base):
@@ -34,3 +35,6 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     deleted_at = Column(DateTime(timezone=True))
 
+    # Add relationships
+    file_validations = relationship("FileValidation", back_populates="user")
+    single_validations = relationship("SingleValidation", back_populates="user")

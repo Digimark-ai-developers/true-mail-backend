@@ -13,12 +13,14 @@ router = APIRouter()
 fake_otp_db = {}
 verification_tokens = {}
 
+
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
 
 @router.post("/register")
 async def register(request: schema.RegisterRequest, db: Session = Depends(get_db)):
@@ -28,19 +30,16 @@ async def register(request: schema.RegisterRequest, db: Session = Depends(get_db
     verification_token = secrets.token_urlsafe(32)
     verification_tokens[request.email] = verification_token
     hashed_password = security.get_password_hash(request.password)
-    new_user = User(
-        email=request.email,
-        password=hashed_password,
-        is_active=False
-    )
+    new_user = User(email=request.email, password=hashed_password, is_active=False)
     db.add(new_user)
     db.commit()
     await send_verification_email(request.email, verification_token)
     return success_response(
         message="Registration successful. Please check your email to verify your account.",
         data=None,
-        status_code=status.HTTP_201_CREATED
+        status_code=status.HTTP_201_CREATED,
     )
+
 
 @router.get("/verify-email/{token}")
 async def verify_email(token: str, db: Session = Depends(get_db)):
@@ -56,13 +55,14 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
         return error_response("User not found", status_code=status.HTTP_404_NOT_FOUND)
     user.is_verified = True
     user.is_active = True
+    user.total_credits_assigned = 100
+    user.remaining_credits = 100
     db.commit()
     del verification_tokens[email]
     return success_response(
-        message="Email verified successfully. You can now login.",
-        data=None,
-        status_code=status.HTTP_200_OK
+        message="Email verified successfully. You can now login.", data=None, status_code=status.HTTP_200_OK
     )
+
 
 @router.post("/login")
 def login(request: schema.LoginRequest, db: Session = Depends(get_db)):
@@ -79,8 +79,9 @@ def login(request: schema.LoginRequest, db: Session = Depends(get_db)):
             "access_token": access_token,
             "refresh_token": refresh_token,
         },
-        status_code=status.HTTP_200_OK
+        status_code=status.HTTP_200_OK,
     )
+
 
 @router.post("/refresh")
 def refresh_token(request: schema.RefreshTokenRequest):
@@ -95,18 +96,16 @@ def refresh_token(request: schema.RefreshTokenRequest):
             "access_token": access_token,
             "refresh_token": refresh_token,
         },
-        status_code=status.HTTP_200_OK
+        status_code=status.HTTP_200_OK,
     )
+
 
 @router.put("/forgot-password")
 def forgot_password(request: schema.ForgotPasswordRequest):
     otp = 123456  # simulate OTP
     fake_otp_db[request.email] = {"otp": otp, "new_password": request.new_password}
-    return success_response(
-        message="Password Changed Successfully",
-        data=None,
-        status_code=status.HTTP_200_OK
-    )
+    return success_response(message="Password Changed Successfully", data=None, status_code=status.HTTP_200_OK)
+
 
 @router.post("/verify-otp")
 def verify_otp(request: schema.OTPRequest, db: Session = Depends(get_db)):
@@ -117,9 +116,5 @@ def verify_otp(request: schema.OTPRequest, db: Session = Depends(get_db)):
                 user.password = record["new_password"]
                 db.commit()
                 del fake_otp_db[email]
-                return success_response(
-                    message="OTP Verified Successfully",
-                    data=None,
-                    status_code=status.HTTP_200_OK
-                )
+                return success_response(message="OTP Verified Successfully", data=None, status_code=status.HTTP_200_OK)
     return error_response("Invalid OTP", status_code=status.HTTP_400_BAD_REQUEST)
