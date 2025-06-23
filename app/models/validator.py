@@ -1,3 +1,4 @@
+import uuid
 from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey, Float, func
 from sqlalchemy.orm import relationship
 from app.db.session import Base
@@ -13,6 +14,7 @@ class FileValidation(Base):
     total_valid_emails = Column(Integer)
     status = Column(String)
     deliverable = Column(Integer)
+    undeliverable = Column(Integer)
     total = Column(Integer)
     risky = Column(Integer)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -2,7 +2,13 @@ from typing import Any, Optional, List
 from fastapi.responses import JSONResponse
 from fastapi import status
 from app.models.validator import SingleValidation, FileValidation
-from app.schemas.validator import EmailValidationData, GeneralInfo, Details, MailServerInformation
+from app.schemas.validator import (
+    EmailValidationData,
+    GeneralInfo,
+    Details,
+    MailServerInformation,
+    FileEmailValidationData,
+)
 
 
 def success_response(message: str, data: Optional[Any] = None, status_code: int = status.HTTP_200_OK):
@@ -57,4 +63,15 @@ def single_email_validation_response(data: SingleValidation) -> EmailValidationD
             implicit_mx_record=data.implicit_mx_record,
         ),
     )
-    
+
+
+def file_email_validation_response(data: FileEmailValidationData) -> FileEmailValidationData:
+    # Convert each validation data item to EmailValidationData
+    emails = [single_email_validation_response(email_data) for email_data in data.emails]
+
+    return FileEmailValidationData(
+        user_id=data.user_id,
+        file_id=data.file_id,
+        file_name=data.file_name,
+        emails=emails,
+    )
