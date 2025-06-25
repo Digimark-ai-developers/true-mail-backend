@@ -41,3 +41,5 @@ class User(Base):
     # Add relationships
     file_validations = relationship("FileValidation", back_populates="user")
     single_validations = relationship("SingleValidation", back_populates="user")
+    subscriptions_stripe = relationship("SubscriptionsStripe", back_populates="user")
+    invoices = relationship("Invoices", back_populates="user")

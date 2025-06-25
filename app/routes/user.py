@@ -1,9 +1,9 @@
+from fastapi import APIRouter, Depends, status
+from sqlalchemy.orm import Session
 from app.core import security
 from app.models.user import User
 from app.db.session import get_db
-from sqlalchemy.orm import Session
 from app.schemas import user as schema
-from fastapi import APIRouter, Depends, status
 from app.dependencies.auth import get_current_user, UserInfo
 from app.utils.response import success_response, error_response
 

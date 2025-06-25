@@ -13,6 +13,7 @@ from app.db.session import Base
 from app.models.user import User  # Import all models here
 from app.models.validator import SingleValidation, FileValidation
 from app.models.otp import OTP
+from app.models.subscription_stripe import SubscriptionsStripe, Invoices
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
