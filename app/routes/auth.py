@@ -1,12 +1,15 @@
+import secrets
+from typing import Annotated
+from fastapi import APIRouter, Depends, status, BackgroundTasks, HTTPException
+from sqlalchemy.orm import Session
 from app.core import security
 from app.models.user import User
-from sqlalchemy.orm import Session
+from app.models.otp import OTP
 from app.schemas import auth as schema
 from app.db.session import SessionLocal
-from fastapi import APIRouter, Depends, status
 from app.utils.mailer import send_verification_email
 from app.utils.response import success_response, error_response
-import secrets
+from app.services.otp import generate_otp, store_otp, send_otp_email
 
 router = APIRouter()
 
@@ -101,20 +104,50 @@ def refresh_token(request: schema.RefreshTokenRequest):
 
 
 @router.put("/forgot-password")
-def forgot_password(request: schema.ForgotPasswordRequest):
-    otp = 123456  # simulate OTP
-    fake_otp_db[request.email] = {"otp": otp, "new_password": request.new_password}
-    return success_response(message="Password Changed Successfully", data=None, status_code=status.HTTP_200_OK)
+def forgot_password(
+    request: schema.ForgotPasswordRequest, background_tasks: BackgroundTasks, db: Annotated[Session, Depends(get_db)]
+):
+    # otp = 123456  # simulate OTP
+    hashed_password = security.get_password_hash(request.new_password)
+    code = generate_otp()
+    store_otp(db, request.email, hashed_password, code)
+
+    background_tasks.add_task(send_otp_email, request.email, code)
+
+    return success_response(message="OTP sent to your email.", status_code=status.HTTP_200_OK, data=None)
 
 
 @router.post("/verify-otp")
 def verify_otp(request: schema.OTPRequest, db: Session = Depends(get_db)):
-    for email, record in fake_otp_db.items():
-        if record["otp"] == request.otp:
-            user = db.query(User).filter(User.email == email).first()
-            if user:
-                user.password = record["new_password"]
-                db.commit()
-                del fake_otp_db[email]
-                return success_response(message="OTP Verified Successfully", data=None, status_code=status.HTTP_200_OK)
-    return error_response("Invalid OTP", status_code=status.HTTP_400_BAD_REQUEST)
+    try:
+        otp_entry = db.query(OTP).filter_by(code=request.otp).first()
+
+        if not otp_entry:
+            raise HTTPException(status_code=404, detail="OTP not found.")
+
+        if otp_entry.is_expired():
+            db.delete(otp_entry)
+            db.commit()
+            raise HTTPException(status_code=400, detail="OTP expired.")
+
+        if otp_entry.code != request.otp:
+            raise HTTPException(status_code=400, detail="Invalid OTP.")
+
+        user = db.query(User).filter(User.email == otp_entry.email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found.")
+        user.password = otp_entry.password
+        # Optionally delete OTP after success
+        db.delete(otp_entry)
+        db.commit()
+        db.refresh(user)
+        return success_response(
+            message="OTP Verified, Your Password Has Been Changed Successfully. You may now login.",
+            data=None,
+            status_code=status.HTTP_200_OK,
+        )
+    except HTTPException:
+        # Let FastAPI handle HTTPException as normal
+        raise
+    except Exception as e:
+        return error_response(str(e), status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)

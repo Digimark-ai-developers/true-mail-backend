@@ -1,3 +1,4 @@
+from typing import Annotated
 from app.db.session import get_db
 from sqlalchemy.orm import Session
 from fastapi import APIRouter, Depends, status
@@ -22,9 +23,7 @@ async def verify_email(email: str, db: Session = Depends(get_db)):
 
 
 @router.post("/send")
-async def send_email(email: str):
-    # TODO: Implement email sending logic
-    db = Session(get_db)
+async def send_email(email: str, db: Annotated[Session, Depends(get_db)]):
     service = EmailValidationService(db)
     check = await service.homepage_email_validation(email=email, sender_email=DEFAULT_SENDER_EMAIL)
     return success_response(message="Email sending endpoint", data=check, status_code=status.HTTP_201_CREATED)
