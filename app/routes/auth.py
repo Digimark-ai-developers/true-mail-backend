@@ -117,6 +117,7 @@ def forgot_password(
 
     return success_response(message="OTP sent to your email.", status_code=status.HTTP_200_OK, data=None)
 
+
 @router.post("/change_password")
 async def change_password(
     db: Session = Depends(get_db),
@@ -140,20 +141,24 @@ async def change_password(
         HTTPException: 404 if user is not found or password change fails.
 
     """
-    current_password = security.get_password_hash(payload.old_password)
-    user = db.query(User).filter(User.id == current_user.user_id, User.password == current_password).first()
+    user = db.query(User).filter(User.id == current_user.user_id).first()
     if not user:
-        return error_response(message="Invalid user password.", status_code=status.HTTP_404_NOT_FOUND, data=None)
-    
+        return error_response(message="User not found.", status_code=status.HTTP_404_NOT_FOUND, data=None)
+
+    verify_password = security.verify_password(payload.old_password, user.password)
+    if not verify_password:
+        return error_response(message="Invalid old user password.", data=None)
+
     new_passowrd = security.get_password_hash(payload.new_password)
     user.password = new_passowrd
     db.commit()
     db.refresh(user)
     return success_response(
-        message= "Password changed successfully.",
-        status_code= status.HTTP_200_OK,
-        data=None
+        message="Password changed successfully.",
+        status_code=status.HTTP_200_OK,
+        data=None,
     )
+
 
 @router.post("/verify-otp")
 def verify_otp(request: schema.OTPRequest, db: Session = Depends(get_db)):
@@ -174,7 +179,7 @@ def verify_otp(request: schema.OTPRequest, db: Session = Depends(get_db)):
         user = db.query(User).filter(User.email == otp_entry.email).first()
         if not user:
             return error_response(message="User not found.", status_code=404, data=None)
-        
+
         user.password = otp_entry.password
         # Optionally delete OTP after success
         db.delete(otp_entry)
