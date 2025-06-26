@@ -1,8 +1,9 @@
 import secrets
 from typing import Annotated
-from fastapi import APIRouter, Depends, status, BackgroundTasks, HTTPException
+from fastapi import APIRouter, Depends, status, BackgroundTasks, HTTPException, Body
 from sqlalchemy.orm import Session
 from app.core import security
+from app.dependencies.auth import get_current_user, UserInfo
 from app.models.user import User
 from app.models.otp import OTP
 from app.schemas import auth as schema
@@ -116,6 +117,43 @@ def forgot_password(
 
     return success_response(message="OTP sent to your email.", status_code=status.HTTP_200_OK, data=None)
 
+@router.post("/change_password")
+async def change_password(
+    db: Session = Depends(get_db),
+    payload: schema.ChangePasswordRequest = Body(...),
+    current_user: UserInfo = Depends(get_current_user),
+):
+    """
+    Change the password for the currently authenticated user.
+
+    Args:
+
+        payload (ChangePasswordRequest): New password field (min length 6).
+        current_user (UserID): The authenticated user.
+
+    Returns:
+
+        dict: Success message and HTTP 200 status code.
+
+    Raises:
+
+        HTTPException: 404 if user is not found or password change fails.
+
+    """
+    current_password = security.get_password_hash(payload.old_password)
+    user = db.query(User).filter(User.id == current_user.user_id, User.password == current_password).first()
+    if not user:
+        return error_response(message="Invalid user password.", status_code=status.HTTP_404_NOT_FOUND, data=None)
+    
+    new_passowrd = security.get_password_hash(payload.new_password)
+    user.password = new_passowrd
+    db.commit()
+    db.refresh(user)
+    return success_response(
+        message= "Password changed successfully.",
+        status_code= status.HTTP_200_OK,
+        data=None
+    )
 
 @router.post("/verify-otp")
 def verify_otp(request: schema.OTPRequest, db: Session = Depends(get_db)):
@@ -123,19 +161,20 @@ def verify_otp(request: schema.OTPRequest, db: Session = Depends(get_db)):
         otp_entry = db.query(OTP).filter_by(code=request.otp).first()
 
         if not otp_entry:
-            raise HTTPException(status_code=404, detail="OTP not found.")
+            return error_response(message="OTP not found.", status_code=404, data=None)
 
         if otp_entry.is_expired():
             db.delete(otp_entry)
             db.commit()
-            raise HTTPException(status_code=400, detail="OTP expired.")
+            return error_response(message="OTP expired", status_code=404, data=None)
 
         if otp_entry.code != request.otp:
-            raise HTTPException(status_code=400, detail="Invalid OTP.")
+            return error_response(message="Invalid OTP.", status_code=404, data=None)
 
         user = db.query(User).filter(User.email == otp_entry.email).first()
         if not user:
-            raise HTTPException(status_code=404, detail="User not found.")
+            return error_response(message="User not found.", status_code=404, data=None)
+        
         user.password = otp_entry.password
         # Optionally delete OTP after success
         db.delete(otp_entry)

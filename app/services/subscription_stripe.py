@@ -1,13 +1,14 @@
 import uuid, os
-from datetime import datetime, timedelta  # timezone
+from datetime import datetime  # timezone
 
 import stripe
 from dotenv import load_dotenv
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.models.subscription_stripe import Invoices
+from app.utils.response import error_response, success_response
 
 load_dotenv()
 
@@ -61,7 +62,9 @@ class PaymentService:
             )
             return session.url
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
+            return error_response(
+                message=f"Stripe error: {str(e)}", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, data=None
+            )
 
     def handle_webhook(self, payload: bytes, sig_header: str):
         try:
@@ -70,7 +73,7 @@ class PaymentService:
             print("endpoint secert", endpoint_secret)
             event = stripe.Webhook.construct_event(payload, sig_header, endpoint_secret)
         except stripe.error.SignatureVerificationError:
-            raise HTTPException(status_code=400, detail="Invalid signature")
+            return error_response(message="Invalid signature", data=None)
 
         try:
             event_type = event["type"]
@@ -87,15 +90,17 @@ class PaymentService:
             else:
                 print(f"Ignoring event type: {event_type}")
 
-            return {
-                "message": "Stripe webhook processed successfully",
-                "status_code": 200,
-                "success": True,
-            }
+            return success_response(
+                message="Stripe webhook processed successfully",
+                status_code=200,
+                data={"success": True},
+            )
 
         except Exception as e:
             print(f"Error processing Stripe webhook: {e}")
-            raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
+            return error_response(
+                message=f"Stripe error: {str(e)}", status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, data=None
+            )
 
     def _handle_successful_checkout(self, data_object):
         user_id = data_object.get("metadata", {}).get("user_id")
@@ -106,7 +111,7 @@ class PaymentService:
 
         existing_credit = self.db.query(User).filter_by(id=user_id).first()
         if not existing_credit:
-            raise Exception("Credit record not found for user")
+            return error_response(message="Credit record not foun for user", data=None)
 
         number = uuid.uuid4().hex[:12]
 

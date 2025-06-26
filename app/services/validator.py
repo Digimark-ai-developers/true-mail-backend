@@ -1,13 +1,10 @@
-import asyncio
-import csv
 import re
 from collections import Counter
 from datetime import datetime, timezone
-from io import StringIO
-from typing import List, Optional
+from typing import List, Optional, Union
 
-from fastapi import HTTPException, status
-from fastapi.encoders import jsonable_encoder
+from fastapi import status
+from fastapi.responses import JSONResponse
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -15,8 +12,7 @@ from sqlalchemy.orm import Session
 from app.models.validator import SingleValidation, FileValidation
 from app.models.user import User
 from app.schemas.validator import FileEmailValidationData, FileDeletion
-from app.utils.response import single_email_validation_response
-from app.utils.cache import file_emails_validation_status_cache
+from app.utils.response import single_email_validation_response, error_response
 from app.utils.cache import copy_paste_email_validation_status_cache as cache
 from app.utils.cache import single_email_validation_status_cache
 from app.utils.validator import (
@@ -53,7 +49,7 @@ class EmailValidationService:
             # Validate User
             user = self.db.query(User).filter(User.id == user_id).first()
             if not user:
-                raise HTTPException(status_code=400, detail="User ID not found")
+                return error_response(message="User ID not found", data=None)
 
             # Sender Mail
             sender_email = user.email
@@ -61,7 +57,9 @@ class EmailValidationService:
             # Deduct credits
             credit = self.db.query(User).filter(User.id == user_id).first()
             if credit.remaining_credits < 1:
-                raise HTTPException(status_code=403, detail="Insufficient credits to test email")
+                return error_response(
+                    message="Insuffucuent credits to validate email", status_code=status.HTTP_403_FORBIDDEN, data=None
+                )
 
             credit.remaining_credits -= 1
             credit.updated_at = datetime.now(timezone.utc)
@@ -70,7 +68,7 @@ class EmailValidationService:
             # Validate email
             target_email = email
             if not target_email:
-                raise HTTPException(status_code=400, detail="No email provided to validate.")
+                return error_response(message="No email provided to validate", data=None)
 
             disposable_domains = load_disposable_domains()
             is_syntax_valid = validate_email_syntax(target_email)
@@ -172,7 +170,7 @@ class EmailValidationService:
                 "status": "failed",
                 "error": str(e),
             }
-            raise
+            return error_response(message=str(e), data=None)
 
     def get_test_email(self, validated_email_id: int, user_id: int):
         db_validated_email = (
@@ -185,7 +183,7 @@ class EmailValidationService:
             .first()
         )
         if not db_validated_email:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Test email not found")
+            return error_response(message="Validated email not found", status_code=status.HTTP_404_NOT_FOUND, data=None)
 
         return db_validated_email
 
@@ -224,7 +222,9 @@ class EmailValidationService:
         print(db_test_email)
 
         if not db_test_email:
-            raise HTTPException(status_code=404, detail="Test email not found.")
+            return error_response(
+                message="Validated email not found.", status_code=status.HTTP_404_NOT_FOUND, data=None
+            )
 
         db_test_email.soft_delete = True
         self.db.commit()
@@ -395,14 +395,14 @@ class EmailValidationService:
         emails: List[str],
         sender_email: str = "test@example.com",
         file_name: Optional[str] = None,
-    ) -> FileEmailValidationData:
+    ) -> Union[FileEmailValidationData, JSONResponse]:
         user = self.db.query(User).filter(User.id == user_id).first()
         if not user:
-            raise HTTPException(status_code=400, detail="User ID not found")
+            return error_response(message="User ID not found.", data=None)
 
         credit = self.db.query(User).filter(User.id == user_id).first()
         if credit.remaining_credits < 1:
-            raise HTTPException(status_code=403, detail="Insufficient credits to validate emails")
+            return error_response(message="Insuffucuent credits to validate emails", status_code=403, data=None)
 
         disposable_domains = load_disposable_domains()
 
@@ -410,14 +410,14 @@ class EmailValidationService:
         cleaned_emails = [email.strip().lower() for email in emails if email.strip() and validate_email_syntax(email)]
 
         if not cleaned_emails:
-            raise HTTPException(status_code=400, detail="No valid emails found")
+            return error_response(message="No valid emails found", data=None)
 
         total_emails = len(cleaned_emails)
         unique_emails = set(cleaned_emails)
         duplicate_count = total_emails - len(unique_emails)
 
         if credit.remaining_credits < len(cleaned_emails):
-            raise HTTPException(status_code=403, detail="Insufficient credits")
+            return error_response(message="Insufficient credits", status_code=403, data=None)
 
         now = datetime.now(timezone.utc)
         bulk_stat = FileValidation(
@@ -439,7 +439,7 @@ class EmailValidationService:
 
             bulk_id = bulk_stat.id
         except Exception as e:  # noqa: F841
-            raise HTTPException(status_code=500, detail="Internal Server Error")
+            return error_response(message=str(e), status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, data=None)
 
         total_valid = 0
         risky_count = 0
@@ -566,9 +566,9 @@ class EmailValidationService:
             )
         except IntegrityError:
             self.db.rollback()
-            raise HTTPException(status_code=400, detail="Failed to save email records")
+            return error_response(message="Failed to save eamil records", data=None)
 
-    def update_file_name_by_id(self, file_id: int, new_filename: str, user_id: int) -> str:
+    def update_file_name_by_id(self, file_id: int, new_filename: str, user_id: int) -> Union[str, JSONResponse]:
         db_filename = (
             self.db.query(FileValidation)
             .filter(
@@ -580,7 +580,7 @@ class EmailValidationService:
         )
 
         if not db_filename:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found.")
+            return error_response(message="File not found.", status_code=status.HTTP_404_NOT_FOUND, data=None)
 
         db_filename.file_name = new_filename
         self.db.commit()
@@ -603,10 +603,7 @@ class EmailValidationService:
         )
 
         if not bulk_emails:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Bulk emails file not found.",
-            )
+            return error_response(message="File emails not found.", status_code=status.HTTP_404_NOT_FOUND, data=None)
 
         associated_emails = (
             self.db.query(SingleValidation)

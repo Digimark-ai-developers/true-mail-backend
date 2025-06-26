@@ -8,7 +8,7 @@ from app.db.session import SessionLocal
 from app.models.validator import SingleValidation
 from app.schemas.validator import FileValidationEmailsCreate, FileData, FileStatsSchema
 from app.dependencies.auth import get_current_user, UserInfo
-from app.utils.response import success_response, single_email_validation_response
+from app.utils.response import success_response, single_email_validation_response, error_response
 from app.services.validator import EmailValidationService
 from app.utils.cache import single_email_validation_status_cache, copy_paste_email_validation_status_cache
 from app.utils.validator import load_disposable_domains
@@ -52,7 +52,7 @@ async def create_single_email(
 def get_validate_email_status(test_id: str, db: Session = Depends(get_db), user: UserInfo = Depends(get_current_user)):
     task = single_email_validation_status_cache.get(test_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task status not found")
+        return error_response(message="Task status not found", status_code=404, data=None)
 
     if task["status"] == "completed":
         email = db.query(SingleValidation).filter(SingleValidation.id == task["email_id"]).first()
@@ -63,7 +63,7 @@ def get_validate_email_status(test_id: str, db: Session = Depends(get_db), user:
         )
 
     elif task["status"] == "failed":
-        raise HTTPException(status_code=500, detail=task["error"])
+        return error_response(message=f'{task["error"]}', status_code=500, data=None)
 
     return success_response(
         message="Still working...", status_code=status.HTTP_202_ACCEPTED, data={"test_id": test_id, "data": None}
@@ -222,7 +222,7 @@ def get_copy_paste_email_status(
 ):
     task = copy_paste_email_validation_status_cache.get(task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Validation status not found")
+        return error_response(message="Validation status not found", status_code=404, data=None)
 
     if task["status"] == "completed":
         return success_response(
@@ -232,7 +232,7 @@ def get_copy_paste_email_status(
         )
 
     elif task["status"] == "failed":
-        raise HTTPException(status_code=500, detail=task["error"])
+        return error_response(message=f'{task["error"]}', status_code=status.HTTP_400_BAD_REQUEST, data=None)
 
     return success_response(
         message="Still working...",
@@ -294,7 +294,7 @@ def get_file_stats_by_file_id(
     stats = service.get_file_stats(file_id, user.user_id)
 
     if not stats:
-        raise HTTPException(status_code=404, detail="File not found or no emails present")
+        return error_response(message="File not found or no emails present", data=None)
 
     # ✅ validate structure
     validated_stats = TypeAdapter(FileStatsSchema).validate_python(stats)

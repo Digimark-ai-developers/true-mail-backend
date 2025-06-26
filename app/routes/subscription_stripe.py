@@ -1,14 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user, UserInfo
-from app.schemas.subscription_stripe import (
-    CheckoutSessionRequest,
-    GetInvoicesWrapper,
-)
+from app.schemas.subscription_stripe import CheckoutSessionRequest, GetInvoices
 from app.services.subscription_stripe import PaymentService
+from app.utils.response import success_response, error_response
 
 router = APIRouter()
 
@@ -35,11 +33,13 @@ async def create_session(
     checkout_url = service.create_checkout_session(
         user.email, data.success_url, data.card_price, data.credits, user.user_id
     )  # success_url
-    return {
-        "message": "Stripe checkout session created successfully.",
-        "status_code": status.HTTP_200_OK,
-        "checkout_url": checkout_url,
-    }
+    return success_response(
+        message="Stripe checkout session created successfully.",
+        status_code=status.HTTP_200_OK,
+        data={
+            "checkout_url": checkout_url,
+        },
+    )
 
 
 @router.post("/webhook")
@@ -67,20 +67,20 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
         payment_service = PaymentService(db)
         result = payment_service.handle_webhook(payload, sig_header)
 
-        return JSONResponse(
+        return success_response(
+            message=f"{result['message']}",
             status_code=result["status_code"],
-            content={
-                "message": result["message"],
+            data={
                 "success": result["success"],
             },
         )
     except HTTPException as he:
         raise he
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        return error_response(message=f"{str(e)}", data=None)
 
 
-@router.get("/invoices", response_model=GetInvoicesWrapper)
+@router.get("/invoices", response_model=success_response)
 async def get_invoices(user: UserInfo = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Retrieve the Stripe invoice history for the current user.
@@ -95,4 +95,8 @@ async def get_invoices(user: UserInfo = Depends(get_current_user), db: Session =
     """
     service = PaymentService(db)
     invoices = service.get_invoices(user.user_id)
-    return {"message": "Invoices fetched successfully.", "status_code": status.HTTP_200_OK, "data": invoices}
+    return success_response(
+        message="Invoices fetched successfully.",
+        status_code=status.HTTP_200_OK,
+        data=[jsonable_encoder(item) for item in invoices],
+    )
