@@ -638,8 +638,8 @@ class EmailValidationService:
             SingleValidation.soft_delete.is_(False),
         )
 
-        if include_risky is True:
-            query = query.filter(SingleValidation.is_risky.is_(True))
+        if include_risky is False:
+            query = query.filter(SingleValidation.is_risky.is_(False))
         # if False, do not filter by is_risky (i.e., return all)
 
         return query.all()

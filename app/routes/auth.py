@@ -34,7 +34,7 @@ async def register(request: schema.RegisterRequest, db: Session = Depends(get_db
     verification_token = secrets.token_urlsafe(32)
     verification_tokens[request.email] = verification_token
     hashed_password = security.get_password_hash(request.password)
-    new_user = User(email=request.email, password=hashed_password, is_active=False)
+    new_user = User(email=request.email.lower(), password=hashed_password, is_active=False)
     db.add(new_user)
     db.commit()
     await send_verification_email(request.email, verification_token)
@@ -70,7 +70,7 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(request: schema.LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == request.email, User.is_active == True).first()
+    user = db.query(User).filter(User.email == request.email.lower(), User.is_active == True).first()
     if not user:
         return error_response("Invalid credentials", status_code=status.HTTP_401_UNAUTHORIZED)
     if not security.verify_password(request.password, user.password):
