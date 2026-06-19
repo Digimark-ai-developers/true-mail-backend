@@ -13,6 +13,8 @@ except Exception:
     load_dotenv()
 
 from app.database.db_config import SessionLocal
+from app.models.user import User
+from app.models.credits import Credit
 from app.models.email import BulkEmailStats, TestEmail
 from app.utils.mail_utils import (
     load_disposable_domains,
