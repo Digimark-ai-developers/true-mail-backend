@@ -84,7 +84,7 @@ def process_email(email, timeout=7, skip_smtp_check=False, catchall_valid=True):
         is_valid = True
     else:
         smtp_deliverable, smtp_reason, is_valid, validation_reason = perform_email_checks(
-            target_email=email, sender_email=SENDER_EMAIL, disposable_domains=disposable_domains
+            target_email=email, sender_email=SENDER_EMAIL, disposable_domains=disposable_domains, timeout=timeout
         )
 
     has_role = any(r in email for r in ["admin", "info", "support", "sales", "contact"])

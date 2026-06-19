@@ -29,11 +29,11 @@ def validate_email_syntax(email):
     return bool(re.match(pattern, email))
 
 
-def get_mx_record(domain):
+def get_mx_record(domain, timeout=3):
     try:
         resolver = dns.resolver.Resolver()
-        resolver.timeout = 1
-        resolver.lifetime = 3
+        resolver.timeout = max(1, timeout // 3)
+        resolver.lifetime = timeout
         records = resolver.resolve(domain, "MX")
         if records:
             mx_records = sorted([(r.preference, r.exchange.to_text()) for r in records], key=lambda x: x[0])
@@ -44,22 +44,22 @@ def get_mx_record(domain):
         return None, True  # No record found or error = implicit MX
 
 
-def verify_smtp_server(mx_record, domain):
-    ports = [25, 2525, 587, 465] # for testing the original respose of the server if it is not working on 25 port or 2525
+def verify_smtp_server(mx_record, domain, timeout=5):
+    ports = [25, 2525, 587, 465]
     for port in ports:
         try:
-            if port == 465 and port == 587 or port == 2525:       # the original port was tha 465 i hussain testing it now 
+            if port == 465 and port == 587 or port == 2525:
                 context = ssl.create_default_context()
-                with socket.create_connection((mx_record, port), timeout=2) as sock:
+                with socket.create_connection((mx_record, port), timeout=timeout) as sock:
                     with context.wrap_socket(sock, server_hostname=mx_record):
                         return True
             else:
-                with socket.create_connection((mx_record, port), timeout=5):
+                with socket.create_connection((mx_record, port), timeout=timeout):
                     return True
         except:
             continue
     try:
-        with socket.create_connection((domain, 25), timeout=2):
+        with socket.create_connection((domain, 25), timeout=timeout):
             return True
     except:
         return False
@@ -87,54 +87,36 @@ def get_smtp_provider(domain: str) -> str:
     return provider_map.get(domain, "Unknown")  # Returns provider name or "Unknown"
 
 
-def check_email_reachability(email, sender_email, disposable_domains):
-    # Helper function to analyze characters in email address
+def check_email_reachability(email, sender_email, disposable_domains, timeout=7):
     def analyze_string(email):
         alphabetic = sum(1 for c in email if c.isalpha())
         numeric = sum(1 for c in email if c.isdigit())
         symbols = len(email) - alphabetic - numeric
         return {"alphabetic": alphabetic, "numeric": numeric, "symbols": symbols}
 
-    result = analyze_string(email)
+    analyze_string(email)
 
-    # Step 1: Syntax Check
     if not validate_email_syntax(email):
         return False, "Invalid email syntax"
 
-    # Step 2: Split the email into local part and domain
     address = parseaddr(email)[1]
     try:
         _, domain = address.split("@")
     except ValueError:
         return False, "Invalid email format"
 
-    # Step 3: Disposable Email Check
     if domain.lower() in disposable_domains:
         return False, "Disposable email address detected"
 
-    # Step 4: WHOIS Lookup
-    dm_info = {}
-    try:
-        whois_data = whois.whois(domain)
-        dm_info["registrar"] = getattr(whois_data, "registrar", "N/A")
-        dm_info["country"] = getattr(whois_data, "country", "N/A")
-        dm_info["whois_server"] = getattr(whois_data, "whois_server", "N/A")
-    except Exception as e:
-        dm_info = {"error": f"WHOIS lookup failed: {str(e)}"}
-
-    # Step 5: MX Record Check
-    mx_record, is_implicit = get_mx_record(domain)
+    mx_record, is_implicit = get_mx_record(domain, timeout=timeout)
     if not mx_record:
         return False, f"Domain '{domain}' has no valid MX records"
 
-    # Step 6: SMTP Server Validation
-    if not verify_smtp_server(mx_record, domain):
+    if not verify_smtp_server(mx_record, domain, timeout=timeout):
         return False, f"SMTP server for '{domain}' is not accessible"
 
-    # Step 7: Perform the SMTP verification process
-
     try:
-        server = smtplib.SMTP(timeout=2)
+        server = smtplib.SMTP(timeout=timeout)
         server.set_debuglevel(0)
         server.connect(mx_record, 25)
         server.ehlo_or_helo_if_needed()
@@ -143,10 +125,10 @@ def check_email_reachability(email, sender_email, disposable_domains):
         message_str = message.decode("utf-8", "ignore") if hasattr(message, "decode") else str(message)
 
         if code == 250:
-            return True, "VALID", dm_info
-        return False, f"Invalid: SMTP Error {code} - {message_str}", dm_info
+            return True, "VALID"
+        return False, f"Invalid: SMTP Error {code} - {message_str}"
     except Exception as e:
-        return False, f"SMTP verification failed: {str(e)}", dm_info
+        return False, f"SMTP verification failed: {str(e)}"
     finally:
         try:
             server.quit()
@@ -154,25 +136,25 @@ def check_email_reachability(email, sender_email, disposable_domains):
             pass
 
 
-def perform_email_checks(target_email: str, sender_email: str, disposable_domains: list):
+def perform_email_checks(target_email: str, sender_email: str, disposable_domains: list, timeout: int = 7):
     # Extract domain and provider
     try:
         domain = target_email.split("@")[1].lower()
     except IndexError:
-        return False, "Invalid email format", False, "Invalid email format" 
+        return False, "Invalid email format", False, "Invalid email format"
 
     smtp_provider = get_smtp_provider(domain)
 
     # Step 1: Perform MX Check (for safety before SMTP)
-    mx_record, implicit_mx = get_mx_record(domain)
+    mx_record, implicit_mx = get_mx_record(domain, timeout=timeout)
     if not mx_record:
         return False, f"Domain '{domain}' has no valid MX records", False, "MX lookup failed"
 
     # Step 2: Try verifying SMTP server connection (not email itself)
-    smtp_accessible = verify_smtp_server(mx_record, domain)
+    smtp_accessible = verify_smtp_server(mx_record, domain, timeout=timeout)
 
     # Step 3: Check reachability (full verification including SMTP RCPT TO)
-    reachability_result = check_email_reachability(target_email, sender_email, disposable_domains)
+    reachability_result = check_email_reachability(target_email, sender_email, disposable_domains, timeout=timeout)
 
     if isinstance(reachability_result, tuple):
         is_deliverable = reachability_result[0]
