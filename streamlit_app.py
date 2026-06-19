@@ -3,9 +3,14 @@ import os
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timezone
-from dotenv import load_dotenv
 
-load_dotenv()
+# Load secrets into os.environ before any app imports
+try:
+    for key, value in st.secrets.items():
+        os.environ[key] = str(value)
+except Exception:
+    from dotenv import load_dotenv
+    load_dotenv()
 
 from app.database.db_config import SessionLocal
 from app.models.email import BulkEmailStats, TestEmail
