@@ -15,6 +15,7 @@ from app.database.db_config import Base
 
 class BulkEmailStats(Base):
     __tablename__ = "bulk_emails_stats"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, ForeignKey("user.user_id"))
@@ -34,6 +35,7 @@ class BulkEmailStats(Base):
 
 class TestEmail(Base):
     __tablename__ = "test_email"
+    __table_args__ = {"extend_existing": True}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, ForeignKey("user.user_id"))
