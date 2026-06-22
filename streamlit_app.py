@@ -35,6 +35,8 @@ for _k, _v in [
     ("batch_file_id", None),
     ("batch_db_error", None),
     ("batch_done", False),
+    ("batch_original_df", None),
+    ("batch_email_col", None),
 ]:
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -237,41 +239,35 @@ def save_to_db(file_name, emails, results):
         db.close()
 
 
-def build_download_df(results, status_filter="All"):
-    """Build a complete DataFrame for download, optionally filtered by status."""
-    rows = []
-    for r in results:
-        if status_filter == "Valid" and not r["is_valid"]:
-            continue
-        if status_filter == "Invalid" and r["is_valid"]:
-            continue
-        if status_filter == "Risky" and not r["is_risky"]:
-            continue
-        if status_filter == "Deliverable" and not r["is_deliverable"]:
-            continue
-        rows.append({
-            "Email": r["email"],
-            "Domain": r["domain"],
-            "Status": r["status"],
-            "Valid": r["is_valid"],
-            "Deliverable": r["is_deliverable"],
-            "Risky": r["is_risky"],
-            "Disposable": r["is_disposable"],
-            "Score": r["score"],
-            "SMTP Provider": r["smtp_provider"],
-            "MX Record": r["mx_record"],
-            "Has Role": r["has_role"],
-            "Accept All": r["is_accept_all"],
-            "No Reply": r["has_no_reply"],
-            "Reason": r["reason"],
-            "Alphabetical Chars": r["alphabetical_characters"],
-            "Numerical Chars": r["has_numerical_characters"],
-            "Unicode Symbols": r["has_unicode_symbols"],
-        })
-    return pd.DataFrame(rows)
+def build_download_df(original_df, email_col, results, status_filter="All"):
+    """
+    Return the original CSV columns exactly as uploaded, with one 'Status'
+    column appended. Rows are filtered by status_filter but never restructured.
+    """
+    result_map = {r["email"]: r for r in results}
+
+    df = original_df.copy()
+    normalized = df[email_col].astype(str).str.strip().str.lower()
+
+    df["Status"] = normalized.map(lambda e: result_map.get(e, {}).get("status", "Unknown"))
+
+    # Temp columns for non-status filters
+    df["_risky"] = normalized.map(lambda e: bool(result_map.get(e, {}).get("is_risky", False)))
+    df["_deliverable"] = normalized.map(lambda e: bool(result_map.get(e, {}).get("is_deliverable", False)))
+
+    if status_filter == "Valid":
+        df = df[df["Status"] == "Valid"]
+    elif status_filter == "Invalid":
+        df = df[df["Status"] == "Invalid"]
+    elif status_filter == "Risky":
+        df = df[df["_risky"]]
+    elif status_filter == "Deliverable":
+        df = df[df["_deliverable"]]
+
+    return df.drop(columns=["_risky", "_deliverable"])
 
 
-def show_batch_results(results, file_id, db_error):
+def show_batch_results(results, file_id, db_error, original_df, email_col):
     """Render metrics, DB status, filter download, and full table. Persists across reruns."""
     total = len(results)
     valid = sum(1 for r in results if r["is_valid"])
@@ -289,14 +285,12 @@ def show_batch_results(results, file_id, db_error):
     c4.metric("Risky", risky)
     c5.metric("Invalid", invalid)
 
-    # DB save status
     if file_id:
         st.success(f"Saved to database successfully — File ID: {file_id}")
     else:
         st.error(f"Database save failed: {db_error}")
 
     st.divider()
-    st.subheader("Download Results")
 
     filter_col, _ = st.columns([1, 3])
     with filter_col:
@@ -306,14 +300,16 @@ def show_batch_results(results, file_id, db_error):
             key="dl_filter",
         )
 
-    filtered_df = build_download_df(results, status_filter)
+    # Build filtered view from the original uploaded sheet
+    filtered_df = build_download_df(original_df, email_col, results, status_filter)
     match_count = len(filtered_df)
-    st.caption(f"{match_count} email{'s' if match_count != 1 else ''} match the '{status_filter}' filter.")
+    st.caption(f"{match_count} row{'s' if match_count != 1 else ''} match '{status_filter}'.")
 
+    # Download button — filtered original sheet + Status column
     if match_count > 0:
         csv_bytes = filtered_df.to_csv(index=False).encode("utf-8")
         st.download_button(
-            label=f"Download {status_filter} Emails ({match_count})",
+            label=f"Download {status_filter} ({match_count} rows)",
             data=csv_bytes,
             file_name=f"results_{status_filter.lower()}.csv",
             mime="text/csv",
@@ -322,12 +318,9 @@ def show_batch_results(results, file_id, db_error):
     else:
         st.info("No emails match this filter.")
 
-    st.divider()
-    st.subheader("Full Results Table")
-    display_df = build_download_df(results, "All")[
-        ["Email", "Domain", "Status", "Valid", "Deliverable", "Risky", "Score", "SMTP Provider", "Reason"]
-    ]
-    st.dataframe(display_df, use_container_width=True)
+    # Table also respects the same filter selection
+    st.subheader("Results Table")
+    st.dataframe(filtered_df, use_container_width=True)
 
 
 # ── Single Email Mode ──────────────────────────────────────────────────────────
@@ -405,6 +398,8 @@ else:
                 st.session_state.batch_file_id = file_id
                 st.session_state.batch_db_error = db_error
                 st.session_state.batch_done = True
+                st.session_state.batch_original_df = df          # full original sheet
+                st.session_state.batch_email_col = col           # email column name
 
                 progress.empty()
                 status_text.text("Validation complete!")
@@ -415,4 +410,6 @@ else:
             st.session_state.batch_results,
             st.session_state.batch_file_id,
             st.session_state.batch_db_error,
+            st.session_state.batch_original_df,
+            st.session_state.batch_email_col,
         )
