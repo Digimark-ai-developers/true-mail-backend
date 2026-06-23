@@ -41,6 +41,41 @@ for _k, _v in [
     if _k not in st.session_state:
         st.session_state[_k] = _v
 
+# ── Screen Wake Lock ──────────────────────────────────────────────────────────
+def keep_screen_awake(active: bool) -> None:
+    """Hold a Screen Wake Lock while a job runs; release when idle.
+    Graceful no-op where the API is unsupported."""
+    flag = "true" if active else "false"
+    st.components.v1.html(
+        """<script>
+        (function(){
+          try{
+            var w = window.parent;
+            w.__evWantWake = %s;
+            if(!w.__evWakeInit){
+              w.__evWakeInit = true; w.__evWakeLock = null;
+              w.__evAcquire = async function(){
+                try{
+                  if(w.__evWantWake && 'wakeLock' in w.navigator && !w.__evWakeLock){
+                    w.__evWakeLock = await w.navigator.wakeLock.request('screen');
+                    w.__evWakeLock.addEventListener('release', function(){ w.__evWakeLock = null; });
+                  }
+                }catch(e){}
+              };
+              w.__evRelease = async function(){
+                try{ if(w.__evWakeLock){ await w.__evWakeLock.release(); w.__evWakeLock = null; } }catch(e){}
+              };
+              w.document.addEventListener('visibilitychange', function(){
+                if(w.document.visibilityState==='visible' && w.__evWantWake){ w.__evAcquire(); }
+              });
+            }
+            if(w.__evWantWake){ w.__evAcquire(); } else { w.__evRelease(); }
+          }catch(e){}
+        })();
+        </script>""" % flag,
+        height=0,
+    )
+
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.info(f"Loaded {len(disposable_domains)} disposable email domains")
@@ -369,6 +404,7 @@ else:
 
                 progress = st.progress(0)
                 status_text = st.empty()
+                keep_screen_awake(True)   # acquire lock before long loop
                 results = []
                 last_domain = None
 
@@ -401,11 +437,13 @@ else:
                 st.session_state.batch_original_df = df          # full original sheet
                 st.session_state.batch_email_col = col           # email column name
 
+                keep_screen_awake(False)  # release lock — job finished
                 progress.empty()
                 status_text.text("Validation complete!")
 
     # Always render results if they exist — survives download button clicks and filter changes
     if st.session_state.batch_done and st.session_state.batch_results:
+        keep_screen_awake(False)  # ensure lock is released on every idle re-render
         show_batch_results(
             st.session_state.batch_results,
             st.session_state.batch_file_id,
