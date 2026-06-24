@@ -1,5 +1,6 @@
 import os
 import time
+import uuid
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timezone
@@ -37,6 +38,8 @@ for _k, _v in [
     ("batch_done", False),
     ("batch_original_df", None),
     ("batch_email_col", None),
+    ("batch_task_id", None),
+    ("batch_logs", []),
 ]:
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -302,7 +305,7 @@ def build_download_df(original_df, email_col, results, status_filter="All"):
     return df.drop(columns=["_risky", "_deliverable"])
 
 
-def show_batch_results(results, file_id, db_error, original_df, email_col):
+def show_batch_results(results, file_id, db_error, original_df, email_col, task_id, logs):
     """Render metrics, DB status, filter download, and full table. Persists across reruns."""
     total = len(results)
     valid = sum(1 for r in results if r["is_valid"])
@@ -311,6 +314,7 @@ def show_batch_results(results, file_id, db_error, original_df, email_col):
     invalid = total - valid
 
     st.divider()
+    st.caption(f"Task ID: `{task_id}`")
     st.subheader("Results Summary")
 
     c1, c2, c3, c4, c5 = st.columns(5)
@@ -357,6 +361,13 @@ def show_batch_results(results, file_id, db_error, original_df, email_col):
     st.subheader("Results Table")
     st.dataframe(filtered_df, use_container_width=True)
 
+    # Task log panel
+    with st.expander(f"Task Logs — {task_id}", expanded=False):
+        if logs:
+            st.code("\n".join(logs), language=None)
+        else:
+            st.caption("No logs recorded.")
+
 
 # ── Single Email Mode ──────────────────────────────────────────────────────────
 if mode == "Single Email":
@@ -398,10 +409,18 @@ else:
             st.info(f"Found {len(unique_emails)} unique emails ({duplicates} duplicates removed).")
 
             if st.button("Start Validation"):
+                # Generate unique task ID for this run
+                task_id = uuid.uuid4().hex[:10].upper()
+                started_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                logs = [f"[{started_at}] Task {task_id} started — {len(unique_emails)} unique emails from '{uploaded_file.name}'"]
+
                 # Clear any previous run
                 st.session_state.batch_done = False
                 st.session_state.batch_results = None
+                st.session_state.batch_task_id = task_id
+                st.session_state.batch_logs = logs
 
+                st.info(f"Task ID: `{task_id}`")
                 progress = st.progress(0)
                 status_text = st.empty()
                 keep_screen_awake(True)   # acquire lock before long loop
@@ -409,7 +428,7 @@ else:
                 last_domain = None
 
                 for i, email in enumerate(unique_emails):
-                    status_text.text(f"Checking {i + 1}/{len(unique_emails)}: {email}")
+                    status_text.text(f"[{task_id}] Checking {i + 1}/{len(unique_emails)}: {email}")
                     domain = email.split("@", 1)[-1] if "@" in email else ""
 
                     if last_domain and domain != last_domain:
@@ -417,25 +436,32 @@ else:
                     else:
                         time.sleep(delay_between_emails)
 
-                    results.append(process_email(
+                    r = process_email(
                         email,
                         timeout=verification_timeout,
                         skip_smtp_check=skip_smtp,
                         catchall_valid=treat_catchall_valid,
-                    ))
+                    )
+                    results.append(r)
+                    ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
+                    logs.append(f"[{ts}] {email} → {r['status']} | {r['reason']}")
                     last_domain = domain
                     progress.progress((i + 1) / len(unique_emails))
 
                 status_text.text("Saving to database...")
                 file_id, db_error = save_to_db(uploaded_file.name, emails, results)
 
+                finished_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                logs.append(f"[{finished_at}] Task {task_id} complete — DB file_id={file_id or 'ERROR: ' + str(db_error)}")
+
                 # Persist everything in session_state so results survive reruns
                 st.session_state.batch_results = results
                 st.session_state.batch_file_id = file_id
                 st.session_state.batch_db_error = db_error
                 st.session_state.batch_done = True
-                st.session_state.batch_original_df = df          # full original sheet
-                st.session_state.batch_email_col = col           # email column name
+                st.session_state.batch_original_df = df
+                st.session_state.batch_email_col = col
+                st.session_state.batch_logs = logs
 
                 keep_screen_awake(False)  # release lock — job finished
                 progress.empty()
@@ -450,4 +476,6 @@ else:
             st.session_state.batch_db_error,
             st.session_state.batch_original_df,
             st.session_state.batch_email_col,
+            st.session_state.batch_task_id,
+            st.session_state.batch_logs,
         )
